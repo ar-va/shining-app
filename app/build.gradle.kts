@@ -68,3 +68,19 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
 }
+
+// Produce an informatively named copy of each built APK, e.g. Shining-1.4.0.apk, under
+// build/named-apk/. Works for local builds and CI, independent of the AGP output API.
+tasks.matching { it.name == "assembleRelease" || it.name == "assembleDebug" }.configureEach {
+    val type = if (name.contains("Release")) "Release" else "Debug"
+    finalizedBy("nameApk$type")
+}
+listOf("release", "debug").forEach { type ->
+    val cap = type.replaceFirstChar { it.uppercase() }
+    tasks.register<Copy>("nameApk$cap") {
+        from(layout.buildDirectory.dir("outputs/apk/$type")) { include("app-$type.apk") }
+        into(layout.buildDirectory.dir("named-apk"))
+        val suffix = if (type == "debug") "-debug" else ""
+        rename { "Shining-${android.defaultConfig.versionName}$suffix.apk" }
+    }
+}

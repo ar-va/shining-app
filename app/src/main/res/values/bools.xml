@@ -1,0 +1,4 @@
+<resources>
+    <!-- Device controls (LightControlsService) exist from Android 11. -->
+    <bool name="device_controls_enabled">false</bool>
+</resources>

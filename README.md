@@ -5,6 +5,7 @@ A small Android app that controls a Tuya-based LED strip (sold as the Lenovo Sma
 It replaces the Smart Life app for day-to-day control:
 
 - Power on/off: big button, plus a **Quick Settings tile**
+- **Device controls** (Android 11+): on/off and brightness next to your other smart-home tiles, also from the lock screen
 - Colour (hue + saturation), white (warmth), and brightness sliders
 - One-tap presets
 - Finds the light on your network automatically
@@ -54,6 +55,10 @@ APKs built on different machines are signed with different debug keys. If you sw
 ### Quick Settings tile
 
 Pull down the notification shade → ✏️ edit → drag **Shining** into your tiles.
+
+### Device controls
+
+Pull down the shade → **Device controls** (on Pixel it may be the **Home** tile) → ⋮ → **Add controls** → **Shining** → tick **Lightstrip** → **Save**. Tap the tile to switch the light on or off; drag across it to set brightness. To use it from the lock screen, turn on **Settings → Display → Lock screen → Control from locked device**.
 
 ## Things to know
 

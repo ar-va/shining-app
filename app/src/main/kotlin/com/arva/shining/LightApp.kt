@@ -2,6 +2,7 @@ package com.arva.shining
 
 import android.app.Application
 import android.content.Context
+import androidx.core.content.edit
 import com.arva.tuya.DeviceConfig
 import com.arva.tuya.LightDps
 import com.arva.tuya.LightSchema
@@ -43,16 +44,16 @@ class ConfigStore(context: Context) {
     }
 
     fun save(cfg: DeviceConfig) {
-        prefs.edit()
-            .putString("name", cfg.name).putString("id", cfg.id).putString("ip", cfg.ip)
-            .putString("key", cfg.localKey).putString("version", cfg.version.text)
-            .remove("schema")
-            .apply()
+        prefs.edit {
+            putString("name", cfg.name); putString("id", cfg.id); putString("ip", cfg.ip)
+            putString("key", cfg.localKey); putString("version", cfg.version.text)
+            remove("schema")
+        }
     }
 
     var schema: LightSchema?
         get() = prefs.getString("schema", null)?.let { runCatching { LightSchema.valueOf(it) }.getOrNull() }
-        set(value) = prefs.edit().putString("schema", value?.name).apply()
+        set(value) = prefs.edit { putString("schema", value?.name) }
 }
 
 /**

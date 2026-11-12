@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- targetSdk is kept at 35 on purpose: newer targets require the "local network access"
+         permission for talking to the light (see CLAUDE.md, decision 4). -->
+    <issue id="OldTargetApi" severity="ignore" />
+</lint>

@@ -28,6 +28,7 @@ class LightApp : Application() {
     val store by lazy { ConfigStore(this) }
     val controller by lazy { LightController(store) }
     val automations by lazy { com.arva.shining.automation.AutomationStore(this) }
+    val themeStore by lazy { ThemeStore(this) }
 
     /** For work that must outlive a screen (shortcut commands, automation runs). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

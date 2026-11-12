@@ -1,5 +1,12 @@
 package com.arva.shining.ui
 
+import com.arva.shining.lightApp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -106,10 +113,38 @@ private val ArvaType = Typography(
     labelSmall = TextStyle(fontFamily = PlexMono, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
 )
 
+/** Builds ARVA tokens from a Material You dynamic scheme, so custom components follow the wallpaper. */
+private fun arvaFromDynamic(s: androidx.compose.material3.ColorScheme, dark: Boolean): ArvaColors {
+    val brand = if (dark) ArvaDark else ArvaLight
+    val hoverTowards = if (dark) Color.White else Color.Black
+    return ArvaColors(
+        bg = s.background, surface = s.surface, sunken = s.surfaceVariant, line = s.outlineVariant,
+        text = s.onBackground, text2 = s.onSurfaceVariant,
+        accent = s.primary, accentHover = androidx.compose.ui.graphics.lerp(s.primary, hoverTowards, 0.12f),
+        onAccent = s.onPrimary, accentTint = s.primaryContainer,
+        moss = s.tertiary, // the dynamic secondary accent takes Moss's role
+        success = brand.success, warning = brand.warning, error = s.error,
+    )
+}
+
 @Composable
 fun ShiningTheme(content: @Composable () -> Unit) {
-    val c = if (isSystemInDarkTheme()) ArvaDark else ArvaLight
-    val base = if (c == ArvaDark) darkColorScheme() else lightColorScheme()
+    val context = LocalContext.current
+    val store = context.lightApp.themeStore
+    val mode by store.mode.collectAsState()
+    val dynamicPref by store.dynamic.collectAsState()
+    val dark = when (mode) {
+        com.arva.shining.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        com.arva.shining.ThemeMode.LIGHT -> false
+        com.arva.shining.ThemeMode.DARK -> true
+    }
+    val useDynamic = dynamicPref && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val c = when {
+        useDynamic -> arvaFromDynamic(if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context), dark)
+        dark -> ArvaDark
+        else -> ArvaLight
+    }
+    val base = if (dark) darkColorScheme() else lightColorScheme()
     // Map tokens onto Material roles so stock components inherit the palette.
     val scheme = base.copy(
         primary = c.accent, onPrimary = c.onAccent,

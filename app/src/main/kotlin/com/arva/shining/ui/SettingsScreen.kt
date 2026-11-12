@@ -1,5 +1,9 @@
 package com.arva.shining.ui
 
+import com.arva.shining.lightApp
+import com.arva.shining.ThemeMode
+import androidx.compose.runtime.collectAsState
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,7 +49,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
     val context = LocalContext.current
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
-        ArvaHeader(title = "Light setup", navigation = { HeaderIcon(R.drawable.ic_arrow_left, "Back", onBack) })
+        ArvaHeader(title = "Settings", navigation = { HeaderIcon(R.drawable.ic_arrow_left, "Back", onBack) })
         Column(
             Modifier
                 .fillMaxSize()
@@ -149,6 +153,33 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                         onSave(cfg)
                     }
                 })
+            }
+
+            AppearanceCard()
+        }
+    }
+}
+
+/** Theme mode (System/Light/Dark) and Material You — applies live. */
+@Composable
+private fun AppearanceCard() {
+    val c = Arva.colors
+    val store = LocalContext.current.lightApp.themeStore
+    val mode by store.mode.collectAsState()
+    val dynamic by store.dynamic.collectAsState()
+    SettingCard("Appearance") {
+        GroupLabel("Theme")
+        Segmented(
+            listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark"),
+            mode, store::setMode,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Material You", style = MaterialTheme.typography.titleSmall, color = c.text)
+                    Text("Use colours from your wallpaper.", style = MaterialTheme.typography.bodySmall, color = c.text2)
+                }
+                ArvaSwitch(dynamic, "Material You", store::setDynamic)
             }
         }
     }

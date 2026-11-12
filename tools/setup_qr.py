@@ -5,7 +5,8 @@ Turn tinytuya's wizard output into a QR code the Shining app understands.
     python3 -m tinytuya wizard          # once: creates devices.json (+ snapshot.json)
     python3 tools/setup_qr.py           # prints a QR; scan it with the phone camera
 
-Options: --name "Desk strip" to pick a device, --ip / --version to override.
+Options: --name "Desk strip" to pick a device, --ip / --version to override,
+--png qr.png to save the QR as an image.
 Keep devices.json private: it contains your local keys.
 """
 import argparse
@@ -30,6 +31,7 @@ def main():
     ap.add_argument("--name", help="device name (substring match) if you have several")
     ap.add_argument("--ip")
     ap.add_argument("--version")
+    ap.add_argument("--png", metavar="FILE", help="also save the QR as an image (needs: pip install 'qrcode[pil]')")
     args = ap.parse_args()
 
     devices = load(args.devices)
@@ -60,6 +62,9 @@ def main():
         qr = qrcode.QRCode(border=2)
         qr.add_data(link)
         qr.print_ascii(invert=True)
+        if args.png:
+            qrcode.make(link, border=4, box_size=12).save(args.png)
+            print(f"\nQR image saved to {args.png} (it contains your local key; delete it after scanning)")
     except ImportError:
         print("(pip install qrcode to get a scannable QR code here)")
     print("\nSetup link (or copy this to the phone and use 'Paste setup link'):\n" + link + "\n")

@@ -15,3 +15,5 @@ tuya-raw.json
 snapshot.json
 .venv/
 __pycache__/
+# QR images from tools/setup_qr.py --png contain the local key
+setup-qr.png

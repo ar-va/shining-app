@@ -118,7 +118,7 @@ object Presence {
                 store.setResult(a.id, "Skipped $stamp: light was already on")
                 continue
             }
-            runCatching { app.controller.run(a.command, network.socketFactory) }
+            runCatching { app.controller.run(a.command, network) }
                 .onSuccess { store.setResult(a.id, "Ran $stamp (arrived home)") }
                 .onFailure { store.setResult(a.id, "Skipped $stamp: ${it.message ?: "error"}") }
         }
@@ -128,7 +128,7 @@ object Presence {
     private suspend fun reach(app: LightApp, network: Network, waits: List<Long>): LightController.Snapshot? {
         for (wait in waits) {
             if (wait > 0) delay(wait)
-            runCatching { app.controller.status(network.socketFactory) }
+            runCatching { app.controller.status(network) }
                 .onFailure { Log.i(TAG, "light check on $network failed: ${it.message}") }
                 .getOrNull()?.let { return it }
         }

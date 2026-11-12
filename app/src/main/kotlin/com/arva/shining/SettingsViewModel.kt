@@ -5,10 +5,12 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.arva.shining.light.OpenBekenLight
 import com.arva.tuya.DeviceConfig
 import com.arva.tuya.DiscoveredDevice
 import com.arva.tuya.Discovery
 import com.arva.tuya.LightDps
+import com.arva.tuya.LightKind
 import com.arva.tuya.TuyaDevice
 import com.arva.tuya.TuyaVersion
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +29,7 @@ import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 
 data class SettingsState(
+    val kind: LightKind = LightKind.TUYA,
     val name: String = "Lightstrip",
     val ip: String = "",
     val id: String = "",
@@ -38,22 +41,30 @@ data class SettingsState(
     val testing: Boolean = false,
     val testResult: String? = null,
 ) {
-    fun toConfig() = DeviceConfig(name.trim().ifEmpty { "Lightstrip" }, id.trim(), ip.trim(), key, version)
+    val isOpenBeken: Boolean get() = kind == LightKind.OPENBEKEN
+
+    fun toConfig() = if (isOpenBeken) {
+        DeviceConfig(name.trim().ifEmpty { "Lightstrip" }, id = "", ip = ip.trim(), localKey = "", version = TuyaVersion.V33, kind = LightKind.OPENBEKEN)
+    } else {
+        DeviceConfig(name.trim().ifEmpty { "Lightstrip" }, id.trim(), ip.trim(), key, version, kind = LightKind.TUYA)
+    }
 }
 
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(
         app.lightApp.store.load()?.let {
-            SettingsState(name = it.name, ip = it.ip, id = it.id, key = it.localKey, version = it.version)
+            SettingsState(kind = it.kind, name = it.name, ip = it.ip, id = it.id, key = it.localKey, version = it.version)
         } ?: SettingsState()
     )
     val state: StateFlow<SettingsState> = _state
 
     fun edit(transform: (SettingsState) -> SettingsState) = _state.update { transform(it).copy(testResult = null) }
 
+    fun setKind(kind: LightKind) = edit { it.copy(kind = kind) }
+
     fun pasteLink(text: String?): Boolean {
         val cfg = text?.let { DeviceConfig.fromSetupLink(it) } ?: return false
-        _state.update { it.copy(name = cfg.name, ip = cfg.ip, id = cfg.id, key = cfg.localKey, version = cfg.version) }
+        _state.update { it.copy(kind = cfg.kind, name = cfg.name, ip = cfg.ip, id = cfg.id, key = cfg.localKey, version = cfg.version) }
         return true
     }
 
@@ -82,29 +93,29 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun test() {
-        val cfg = _state.value.toConfig()
+        val s = _state.value
+        val cfg = s.toConfig()
         if (!cfg.isComplete) {
-            _state.update { it.copy(testResult = "Fill in the IP, device ID and a 16-character local key") }
+            _state.update {
+                it.copy(testResult = if (it.isOpenBeken) "Fill in the light's IP address" else "Fill in the IP, device ID and a 16-character local key")
+            }
             return
         }
         _state.update { it.copy(testing = true, testResult = null) }
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val text = withContext(Dispatchers.IO) {
                 runCatching {
-                    TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).use { it.status() }
-                }
-            }
-            val text = result.fold(
-                onSuccess = { dps ->
-                    val schema = LightDps.detect(dps)
-                    val kind = when (schema) {
-                        null -> "Connected, but the device reports no light data points."
-                        else -> "Connected. ${schema.name} light layout."
+                    if (s.isOpenBeken) {
+                        val state = OpenBekenLight.fromAddress(cfg.ip).read().state
+                        "Connected to OpenBeken.\n" + (state?.let { "Power ${if (it.on) "on" else "off"}, brightness ${(it.brightness * 100).toInt()}%" } ?: "")
+                    } else {
+                        val dps = TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).use { it.status() }
+                        val schema = LightDps.detect(dps)
+                        (if (schema == null) "Connected, but the device reports no light data points." else "Connected. ${schema.name} light layout.") +
+                            "\n" + dps.entries.sortedBy { it.key.toIntOrNull() ?: 0 }.joinToString("\n") { "DP ${it.key} = ${it.value}" }
                     }
-                    kind + "\n" + dps.entries.sortedBy { it.key.toIntOrNull() ?: 0 }.joinToString("\n") { "DP ${it.key} = ${it.value}" }
-                },
-                onFailure = { "Failed: ${it.message}" },
-            )
+                }.getOrElse { "Failed: ${it.message}" }
+            }
             _state.update { it.copy(testing = false, testResult = text) }
         }
     }

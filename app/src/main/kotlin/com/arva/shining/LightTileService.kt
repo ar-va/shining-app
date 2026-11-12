@@ -2,7 +2,6 @@ package com.arva.shining
 
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import com.arva.tuya.LightDps
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,7 +27,8 @@ class LightTileService : TileService() {
         val target = tile.state != Tile.STATE_ACTIVE
         render(target, reachable = true) // optimistic
         scope.launch {
-            val ok = runCatching { lightApp.controller.send { LightDps.power(it, target) } }.isSuccess
+            val power = if (target) LightCommand.Power.ON else LightCommand.Power.OFF
+            val ok = runCatching { lightApp.controller.run(LightCommand(power = power)) }.isSuccess
             if (!ok) render(!target, reachable = false)
         }
     }

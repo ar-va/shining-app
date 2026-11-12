@@ -4,16 +4,14 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.arva.tuya.DeviceConfig
-import com.arva.tuya.Hsv
-import com.arva.tuya.LightDps
 import com.arva.tuya.LightMode
-import com.arva.tuya.LightSchema
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 data class UiState(
     val configured: Boolean = false,
@@ -36,16 +34,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<UiState> = _state
 
-    // Slider drags produce many changes: merge them and send the latest every ~100 ms.
-    private val pending = LinkedHashMap<String, (LightSchema) -> Map<String, Any>>()
+    // Slider drags produce many changes a few ms apart. Keep only the latest desired command and
+    // send it at most every ~100 ms, so the light isn't flooded.
+    @Volatile private var pending: LightCommand? = null
     private val wake = Channel<Unit>(Channel.CONFLATED)
 
     init {
         viewModelScope.launch {
             for (unit in wake) {
-                val batch = synchronized(pending) { pending.values.toList().also { pending.clear() } }
-                if (batch.isEmpty()) continue
-                runCatching { controller.send { schema -> batch.fold(emptyMap()) { acc, f -> acc + f(schema) } } }
+                val command = synchronized(this@MainViewModel) { pending.also { pending = null } } ?: continue
+                runCatching { controller.run(command) }
                     .onSuccess { _state.update { it.copy(connected = true, error = null) } }
                     .onFailure { e -> _state.update { it.copy(connected = false, error = e.message) } }
                 delay(100)
@@ -93,7 +91,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun togglePower() {
         val on = !_state.value.on
         _state.update { it.copy(on = on) }
-        queue("power") { LightDps.power(it, on) }
+        queue(LightCommand(power = if (on) LightCommand.Power.ON else LightCommand.Power.OFF))
     }
 
     fun setColourMode(colour: Boolean) {
@@ -131,20 +129,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun sendCurrentMode() {
         val s = _state.value
-        // Mode commands switch the light on themselves; a pending power command is superseded.
-        synchronized(pending) { pending.remove("power") }
-        if (s.colourMode) {
-            queue("mode") { LightDps.colour(it, Hsv(s.hue, s.saturation, s.brightness)) }
-        } else {
-            queue("mode") { LightDps.white(it, s.brightness, s.temperature) }
-        }
+        val bright = (s.brightness * 100).roundToInt().coerceIn(1, 100)
+        queue(
+            if (s.colourMode) {
+                LightCommand(hue = s.hue.roundToInt(), saturation = (s.saturation * 100).roundToInt(), brightness = bright)
+            } else {
+                LightCommand(warmth = (s.temperature * 100).roundToInt(), brightness = bright)
+            }
+        )
     }
 
-    private fun queue(key: String, build: (LightSchema) -> Map<String, Any>) {
-        synchronized(pending) {
-            pending.remove(key)
-            pending[key] = build
-        }
+    private fun queue(command: LightCommand) {
+        synchronized(this) { pending = command }
         wake.trySend(Unit)
     }
 }

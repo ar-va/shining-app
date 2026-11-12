@@ -2,12 +2,15 @@ package com.arva.shining
 
 import android.app.Application
 import android.content.Context
+import android.net.Network
 import androidx.core.content.edit
+import com.arva.shining.light.LightDriver
+import com.arva.shining.light.OpenBekenLight
+import com.arva.shining.light.TuyaLightDriver
 import com.arva.tuya.DeviceConfig
-import com.arva.tuya.LightDps
+import com.arva.tuya.LightKind
 import com.arva.tuya.LightSchema
 import com.arva.tuya.LightState
-import com.arva.tuya.TuyaDevice
 import com.arva.tuya.TuyaException
 import com.arva.tuya.TuyaVersion
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +23,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
-import javax.net.SocketFactory
 
 class LightApp : Application() {
     val store by lazy { ConfigStore(this) }
@@ -43,18 +45,28 @@ class ConfigStore(context: Context) {
     private val prefs = context.getSharedPreferences("light", Context.MODE_PRIVATE)
 
     fun load(): DeviceConfig? {
-        val id = prefs.getString("id", null) ?: return null
-        return DeviceConfig(
-            name = prefs.getString("name", null) ?: "Lightstrip",
-            id = id,
-            ip = prefs.getString("ip", "")!!,
-            localKey = prefs.getString("key", "")!!,
-            version = TuyaVersion.parse(prefs.getString("version", null)) ?: TuyaVersion.V33,
-        )
+        val kind = LightKind.parse(prefs.getString("kind", null))
+        val name = prefs.getString("name", null) ?: "Lightstrip"
+        val ip = prefs.getString("ip", "") ?: ""
+        return when (kind) {
+            LightKind.OPENBEKEN ->
+                if (ip.isBlank()) null
+                else DeviceConfig(name, id = "", ip = ip, localKey = "", version = TuyaVersion.V33, kind = LightKind.OPENBEKEN)
+            LightKind.TUYA -> {
+                val id = prefs.getString("id", null) ?: return null
+                DeviceConfig(
+                    name = name, id = id, ip = ip,
+                    localKey = prefs.getString("key", "")!!,
+                    version = TuyaVersion.parse(prefs.getString("version", null)) ?: TuyaVersion.V33,
+                    kind = LightKind.TUYA,
+                )
+            }
+        }
     }
 
     fun save(cfg: DeviceConfig) {
         prefs.edit {
+            putString("kind", cfg.kind.name)
             putString("name", cfg.name); putString("id", cfg.id); putString("ip", cfg.ip)
             putString("key", cfg.localKey); putString("version", cfg.version.text)
             remove("schema")
@@ -67,90 +79,82 @@ class ConfigStore(context: Context) {
 }
 
 /**
- * Single owner of the TCP connection (Tuya lights often allow only one local client).
- * Serializes calls, keeps the socket open while in use and closes it after 20 s idle.
+ * Single owner of the connection to the light. Serializes calls, reuses a Tuya socket while in use
+ * and closes it after 20 s idle (Tuya lights allow one local client; OpenBeken is stateless HTTP).
  */
 class LightController(private val store: ConfigStore) {
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var device: TuyaDevice? = null
-    private var deviceConfig: DeviceConfig? = null
+    private var driver: LightDriver? = null
+    private var driverConfig: DeviceConfig? = null
     private var idleJob: Job? = null
 
     data class Snapshot(val schema: LightSchema?, val state: LightState?, val dps: Map<String, Any?>)
 
-    suspend fun status(socketFactory: SocketFactory? = null): Snapshot {
-        val dps = withDevice(socketFactory) { it.status() }
-        val schema = LightDps.detect(dps)?.also { if (store.schema != it) store.schema = it } ?: store.schema
-        return Snapshot(schema, schema?.let { LightDps.parse(it, dps) }, dps)
-    }
-
-    /** Builds DPs for the light's schema (querying it once if unknown) and sends them. */
-    suspend fun send(build: (LightSchema) -> Map<String, Any>) {
-        val schema = store.schema ?: status().schema
-            ?: throw TuyaException("This device doesn't look like a Tuya light (no DP 1 or 20)")
-        val dps = build(schema)
-        if (dps.isEmpty()) return
-        withDevice { it.setDps(dps) }
-    }
+    suspend fun status(network: Network? = null): Snapshot = withDriver(network) { it.read().toSnapshot() }
 
     /**
-     * Runs a [LightCommand]. Reads the light first when the command depends on its current state.
-     * [socketFactory] pins the connection to one network (used right after Wi-Fi connects).
+     * Runs a [LightCommand], reading the light first when the command depends on its current state.
+     * [network] pins the connection to one Wi-Fi network (used right after Wi-Fi connects).
      * Returns the state read before the command, if one was read.
      */
-    suspend fun run(command: LightCommand, socketFactory: SocketFactory? = null): Snapshot? {
+    suspend fun run(command: LightCommand, network: Network? = null): Snapshot? {
         if (command.isEmpty) return null
-        val before = if (command.needsState || store.schema == null) status(socketFactory) else null
-        val schema = before?.schema ?: store.schema
-            ?: throw TuyaException("This device doesn't look like a Tuya light (no DP 1 or 20)")
-        val dps = command.toDps(schema, before?.state)
-        withDevice(socketFactory) { it.setDps(dps) }
-        return before
+        return withDriver(network) { driver ->
+            val before = if (command.needsState) driver.read().toSnapshot() else null
+            driver.apply(command, before?.state)
+            before
+        }
     }
 
     fun reset() {
         scope.launch { mutex.withLock { closeLocked() } }
     }
 
-    private suspend fun <T> withDevice(socketFactory: SocketFactory? = null, block: (TuyaDevice) -> T): T = mutex.withLock {
+    private fun com.arva.shining.light.DriverReading.toSnapshot() = Snapshot(schema, state, detail)
+
+    private suspend fun <T> withDriver(network: Network?, block: (LightDriver) -> T): T = mutex.withLock {
         withContext(Dispatchers.IO) {
             val cfg = store.load()?.takeIf { it.isComplete }
                 ?: throw TuyaException("Set up your light first")
-            if (socketFactory != null) {
-                // One-off connection on a specific network; the light allows one client, so drop ours first.
+            if (network != null) {
+                // One-off connection pinned to a network; a Tuya light allows one client, so drop ours first.
                 closeLocked()
-                return@withContext TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version, socketFactory = socketFactory)
-                    .use(block)
+                return@withContext buildDriver(cfg, network).use(block)
             }
-            val dev = device?.takeIf { deviceConfig == cfg } ?: run {
+            val d = driver?.takeIf { driverConfig == cfg } ?: run {
                 closeLocked()
-                TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).also { device = it; deviceConfig = cfg }
+                buildDriver(cfg, null).also { driver = it; driverConfig = cfg }
             }
-            val wasConnected = dev.isConnected
+            val wasConnected = d.isConnected
             val result = try {
-                block(dev)
+                block(d)
             } catch (e: IOException) {
-                // A reused socket may have been dropped by the light; retry once on a fresh one.
+                // A reused Tuya socket may have been dropped by the light; retry once on a fresh one.
                 if (!wasConnected) throw e
-                block(dev)
+                block(d)
             }
             scheduleIdleClose()
             result
         }
     }
 
+    private fun buildDriver(cfg: DeviceConfig, network: Network?): LightDriver = when (cfg.kind) {
+        LightKind.TUYA -> TuyaLightDriver(cfg, network, store.schema) { store.schema = it }
+        LightKind.OPENBEKEN -> OpenBekenLight.fromAddress(cfg.ip, network)
+    }
+
     private fun scheduleIdleClose() {
         idleJob?.cancel()
         idleJob = scope.launch {
             delay(20_000)
-            mutex.withLock { device?.close() }
+            mutex.withLock { driver?.close() }
         }
     }
 
     private fun closeLocked() {
-        device?.close()
-        device = null
-        deviceConfig = null
+        driver?.close()
+        driver = null
+        driverConfig = null
     }
 }

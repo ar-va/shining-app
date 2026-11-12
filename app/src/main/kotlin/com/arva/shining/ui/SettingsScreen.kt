@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arva.shining.R
 import com.arva.shining.SettingsViewModel
 import com.arva.tuya.DeviceConfig
+import com.arva.tuya.LightKind
 import com.arva.tuya.TuyaVersion
 
 @Composable
@@ -77,26 +78,42 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
 
             // 2. Details
             Section("Step 2", "Device details") {
-                Text(
-                    "Scan the QR code from tools/setup_qr.py with the camera, paste the setup link, or type the values.",
-                    style = MaterialTheme.typography.bodyMedium, color = c.text2,
-                )
-                TextLink("Paste setup link", onClick = {
-                    if (!vm.pasteLink(clipboard.getText()?.text)) {
-                        Toast.makeText(context, "The clipboard has no shining:// setup link", Toast.LENGTH_SHORT).show()
-                    }
-                })
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GroupLabel("Light type")
+                    Segmented(
+                        listOf(LightKind.TUYA to "Tuya", LightKind.OPENBEKEN to "OpenBeken"),
+                        s.kind, vm::setKind,
+                    )
+                    Text(
+                        if (s.isOpenBeken) "After flashing open firmware. Needs only the light's IP."
+                        else "Stock firmware over the Tuya LAN protocol.",
+                        style = MaterialTheme.typography.bodySmall, color = c.text2,
+                    )
+                }
+                if (!s.isOpenBeken) {
+                    Text(
+                        "Scan the QR code from tools/setup_qr.py with the camera, paste the setup link, or type the values.",
+                        style = MaterialTheme.typography.bodyMedium, color = c.text2,
+                    )
+                    TextLink("Paste setup link", onClick = {
+                        if (!vm.pasteLink(clipboard.getText()?.text)) {
+                            Toast.makeText(context, "The clipboard has no shining:// setup link", Toast.LENGTH_SHORT).show()
+                        }
+                    })
+                }
                 ArvaField(s.name, { v -> vm.edit { it.copy(name = v) } }, "Name")
                 ArvaField(s.ip, { v -> vm.edit { it.copy(ip = v) } }, "IP address", mono = true, keyboardType = KeyboardType.Uri)
-                ArvaField(s.id, { v -> vm.edit { it.copy(id = v) } }, "Device ID", mono = true)
-                ArvaField(
-                    s.key, { v -> vm.edit { it.copy(key = v) } }, "Local key", mono = true,
-                    isError = s.key.isNotEmpty() && s.key.length != 16,
-                    supporting = "${s.key.length} of 16 characters",
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GroupLabel("Protocol version")
-                    Segmented(TuyaVersion.entries.map { it to it.text }, s.version, { v -> vm.edit { it.copy(version = v) } })
+                if (!s.isOpenBeken) {
+                    ArvaField(s.id, { v -> vm.edit { it.copy(id = v) } }, "Device ID", mono = true)
+                    ArvaField(
+                        s.key, { v -> vm.edit { it.copy(key = v) } }, "Local key", mono = true,
+                        isError = s.key.isNotEmpty() && s.key.length != 16,
+                        supporting = "${s.key.length} of 16 characters",
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GroupLabel("Protocol version")
+                        Segmented(TuyaVersion.entries.map { it to it.text }, s.version, { v -> vm.edit { it.copy(version = v) } })
+                    }
                 }
             }
 

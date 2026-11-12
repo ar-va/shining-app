@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <lint>
-    <!-- targetSdk is kept at 35 on purpose: newer targets require the "local network access"
+    <!-- targetSdk stays at 35 on purpose: newer targets require the "local network access"
          permission for talking to the light (see CLAUDE.md, decision 4). -->
     <issue id="OldTargetApi" severity="ignore" />
+    <!-- OpenBeken lights speak plain HTTP on the LAN; cleartext to local devices is required
+         and intended (see network_security_config.xml). -->
+    <issue id="InsecureBaseConfiguration" severity="ignore" />
 </lint>

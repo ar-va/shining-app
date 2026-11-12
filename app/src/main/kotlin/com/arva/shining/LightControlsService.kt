@@ -13,9 +13,6 @@ import android.service.controls.templates.ControlButton
 import android.service.controls.templates.RangeTemplate
 import android.service.controls.templates.ToggleRangeTemplate
 import androidx.annotation.RequiresApi
-import com.arva.tuya.LightDps
-import com.arva.tuya.LightMode
-import com.arva.tuya.LightSchema
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -72,18 +69,10 @@ class LightControlsService : ControlsProviderService() {
         }
 
     override fun performControlAction(controlId: String, action: ControlAction, consumer: Consumer<Int>) {
-        val current = last?.state
-        val build: (LightSchema) -> Map<String, Any> = when (action) {
-            is BooleanAction -> fun(schema: LightSchema) = LightDps.power(schema, action.newState)
-            is FloatAction -> {
-                val b = (action.newValue / 100f).coerceIn(0.01f, 1f)
-                val colour = current?.colour
-                if (current?.mode == LightMode.COLOUR && colour != null) {
-                    fun(schema: LightSchema) = LightDps.colour(schema, colour.copy(v = b))
-                } else {
-                    fun(schema: LightSchema) = LightDps.white(schema, b, current?.temperature)
-                }
-            }
+        val command = when (action) {
+            is BooleanAction -> LightCommand(power = if (action.newState) LightCommand.Power.ON else LightCommand.Power.OFF)
+            // Brightness only: the driver keeps the current colour/white mode.
+            is FloatAction -> LightCommand(brightness = action.newValue.toInt().coerceIn(1, 100))
             else -> {
                 consumer.accept(ControlAction.RESPONSE_FAIL)
                 return
@@ -91,7 +80,7 @@ class LightControlsService : ControlsProviderService() {
         }
         consumer.accept(ControlAction.RESPONSE_OK)
         scope.launch {
-            runCatching { lightApp.controller.send(build) }
+            runCatching { lightApp.controller.run(command) }
                 .onFailure { error = it.message }
             refresh()
         }

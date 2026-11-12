@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OpenBeken lights speak plain HTTP on the local network; Android blocks cleartext by default.
+     Shining only ever connects to a user-entered LAN device, so cleartext is permitted. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

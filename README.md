@@ -16,7 +16,7 @@ The release APK is under 2 MB and needs no Google services. Design follows the [
 
 ## How it works
 
-Smart Life is Tuya's white-label app. Tuya devices also listen on the LAN (TCP 6668) for AES-encrypted JSON commands. This app speaks that protocol (versions 3.3, 3.4 and 3.5) natively in Kotlin, with no third-party crypto. The protocol is the same one documented by the open-source [tinytuya](https://github.com/jasonacox/tinytuya) project. The tests in this repo run against a fake device built on tinytuya's own code.
+Smart Life is Tuya's white-label app. Tuya devices also listen on the LAN (TCP 6668) for AES-encrypted JSON commands. This app speaks that protocol (versions 3.3, 3.4 and 3.5) natively in Kotlin, with no third-party crypto. If you replace the strip's firmware with [OpenBeken](https://github.com/openshwprojects/OpenBK7231T_App), Shining can also control it over OpenBeken's local HTTP (choose the light type in Settings). The protocol is the same one documented by the open-source [tinytuya](https://github.com/jasonacox/tinytuya) project. The tests in this repo run against a fake device built on tinytuya's own code.
 
 The only thing the app can't discover by itself is the device's **local key**, a 16-character secret that Tuya's cloud assigns when the light is paired. You fetch it once (see below).
 
@@ -93,6 +93,16 @@ The strip is still in Google Home through your Smart Life account, so Google Hom
 
 Use Google Home for anything that must happen while you are out; use Shining for local, private automations at home.
 
+## Going cloud-free with OpenBeken (optional, advanced)
+
+The Tuya strip keeps a connection to Tuya's cloud (that's how Smart Life and Google Home reach it). To cut the cloud entirely you can flash open firmware. Shining supports both before and after.
+
+1. Flash **OpenBeken** onto the strip's WB3S (BK7231T) controller with [tuya-cloudcutter](https://github.com/tuya-cloudcutter/tuya-cloudcutter) — no soldering on this hardware, but it needs a Linux machine and a cloudcutter-compatible Wi-Fi adapter (e.g. AR9271). Keep the firmware backup it offers.
+2. In OpenBeken's web page, import the strip's pin map (RGBCW: R=P9, G=P24, B=P26, cold=P6, warm=P8, PWM 1000 Hz) and join your Wi-Fi.
+3. In Shining: **Settings → Light type → OpenBeken**, enter the strip's IP, **Test**, **Save**.
+
+After flashing, the strip talks only to your LAN — no Tuya cloud, and no Google Home (unless you add a local Matter bridge). Everything in Shining works the same.
+
 ## Things to know
 
 - **Google Home keeps working.** It talks to the Tuya cloud through your Smart Life account, not through the app. You can uninstall the Smart Life app, but **don't delete the account** and **don't remove or re-pair the light**: re-pairing gives it a new local key, and you'd repeat step 1.
@@ -115,7 +125,7 @@ Use **Settings → Test connection**. It shows the raw data points (DPs) the lig
 ```
 tuya/   Pure Kotlin/JVM Tuya LAN protocol library (framing, AES-ECB/GCM, session keys, discovery, light DPs)
 app/    Android app (Jetpack Compose, ARVA design tokens, minSdk 26)
-tools/  mock_device.py (fake light for testing), setup_qr.py (QR from tinytuya output)
+tools/  mock_device.py (fake Tuya light), mock_openbeken.py (fake OpenBeken light), setup_qr.py
 ```
 
 ```bash

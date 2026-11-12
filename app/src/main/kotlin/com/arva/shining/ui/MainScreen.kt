@@ -41,12 +41,15 @@ import com.arva.shining.UiState
 import kotlin.math.roundToInt
 
 @Composable
-fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit) {
+fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val c = Arva.colors
     Column(Modifier.fillMaxSize().background(c.bg)) {
         ArvaHeader("Shining") {
-            if (s.configured) HeaderIcon(R.drawable.ic_refresh, "Refresh", vm::refresh)
+            if (s.configured) {
+                HeaderIcon(R.drawable.ic_refresh, "Refresh", vm::refresh)
+                HeaderIcon(R.drawable.ic_clock, "Automations", onOpenAutomations)
+            }
             HeaderIcon(R.drawable.ic_settings, "Light setup", onOpenSettings)
         }
         Box(Modifier.fillMaxWidth().height(2.dp)) {

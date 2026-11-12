@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the Shining icon for these. Each opens a shining://light?… command. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="on" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_on">
+        <intent android:action="android.intent.action.VIEW" android:data="shining://light?power=on"
+            android:targetPackage="com.arva.shining" android:targetClass="com.arva.shining.CommandActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="off" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_off">
+        <intent android:action="android.intent.action.VIEW" android:data="shining://light?power=off"
+            android:targetPackage="com.arva.shining" android:targetClass="com.arva.shining.CommandActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="warm" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_warm">
+        <intent android:action="android.intent.action.VIEW" android:data="shining://light?preset=Warm&amp;brightness=40"
+            android:targetPackage="com.arva.shining" android:targetClass="com.arva.shining.CommandActivity" />
+    </shortcut>
+</shortcuts>

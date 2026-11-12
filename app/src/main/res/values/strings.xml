@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Shining</string>
     <string name="tile_label">Shining</string>
+    <string name="shortcut_on">Turn on</string>
+    <string name="shortcut_off">Turn off</string>
+    <string name="shortcut_warm">Warm 40%</string>
 </resources>

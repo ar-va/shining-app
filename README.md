@@ -6,6 +6,8 @@ It replaces the Smart Life app for day-to-day control:
 
 - Power on/off: big button, plus a **Quick Settings tile**
 - **Device controls** (Android 11+): on/off and brightness next to your other smart-home tiles, also from the lock screen
+- **Automations**: schedules, sunset/sunrise, and arriving home, all run on the phone
+- **Hooks** for launcher shortcuts, NFC tags, Tasker and MacroDroid
 - Colour (hue + saturation), white (warmth), and brightness sliders
 - One-tap presets
 - Finds the light on your network automatically
@@ -50,7 +52,7 @@ Alternatively, open **Settings** in the app, tap **Scan Wi-Fi** to fill in the I
 - Download `app-release.apk` from this repo's [Releases](../../releases) or the latest [Actions build](../../actions), or
 - Build it yourself: `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk`
 
-APKs built on different machines are signed with different debug keys. If you switch between a CI build and a local build, uninstall the old one first.
+Releases are signed with a permanent key, so new versions install over old ones. (Builds without the key, such as forks, fall back to a debug key and need an uninstall first.)
 
 ### Quick Settings tile
 
@@ -59,6 +61,37 @@ Pull down the notification shade → ✏️ edit → drag **Shining** into your 
 ### Device controls
 
 Pull down the shade → **Device controls** (on Pixel it may be the **Home** tile) → ⋮ → **Add controls** → **Shining** → tick **Lightstrip** → **Save**. Tap the tile to switch the light on or off; drag across it to set brightness. To use it from the lock screen, turn on **Settings → Display → Lock screen → Control from locked device**.
+
+## Automations
+
+Open the clock icon in the app. Automations run **on the phone**, so they work while it is at home on your Wi-Fi.
+
+| Trigger | Notes |
+|---|---|
+| **Time** | A time on chosen days. Allow **exact timing** when the app asks, or Android may run it a few minutes late. |
+| **Sunset / sunrise** | With an offset. Uses your approximate location once; times are worked out on the phone. |
+| **Arriving home** | When the phone joins your Wi-Fi and the light answers, and the light is off. Optional: only after dark, quiet late at night. At most once every 30 minutes. |
+
+How arriving home works: about every 15 minutes the app notes whether you are home (on Wi-Fi and the light answers). Only while you are away does it ask Android to tell it when Wi-Fi connects, so Wi-Fi hiccups at home never count as arriving. Leaving is noticed within about 15 minutes (longer while the phone is asleep), so a very short trip may not count.
+
+### Hooks for other apps
+
+One command format everywhere: `power=on|off|toggle`, `preset=<name>`, `brightness=1-100`, `hue=0-360`, `saturation=0-100`, `warmth=0-100` (0 = warm).
+
+- **Launcher shortcuts:** long-press the Shining icon (Turn on, Turn off, Warm 40%).
+- **Links / NFC tags:** `shining://light?power=off`, `shining://light?preset=Warm&brightness=40`
+- **Tasker / MacroDroid:** send a broadcast with action `com.arva.shining.action.LIGHT`, package `com.arva.shining`, and an extra `command` = `power=toggle` (or separate extras with the same names).
+
+### Google Home automations (work when you are away)
+
+The strip is still in Google Home through your Smart Life account, so Google Home can automate it from the cloud, even when your phone is off or away:
+
+1. Google Home app → **Automations** → **+** → **Household**.
+2. **Add starter**: e.g. *Time of day* (sunrise/sunset), *Everyone leaves*, *Someone comes home*.
+3. **Add action** → **Adjust home devices** → choose the lightstrip → on/off, brightness or colour.
+4. Save.
+
+Use Google Home for anything that must happen while you are out; use Shining for local, private automations at home.
 
 ## Things to know
 

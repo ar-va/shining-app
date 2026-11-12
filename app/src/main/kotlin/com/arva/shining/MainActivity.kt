@@ -13,6 +13,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arva.shining.ui.ShiningTheme
+import com.arva.shining.ui.AutomationEditor
+import com.arva.shining.ui.AutomationsScreen
 import com.arva.shining.ui.MainScreen
 import com.arva.shining.ui.SettingsScreen
 import com.arva.tuya.DeviceConfig
@@ -26,19 +28,33 @@ class MainActivity : ComponentActivity() {
         handleSetupLink(intent)
         setContent {
             ShiningTheme {
-                var settingsOpen by rememberSaveable { mutableStateOf(false) }
-                if (settingsOpen) {
-                    val settings: SettingsViewModel = viewModel()
-                    SettingsScreen(
-                        vm = settings,
-                        onBack = { settingsOpen = false },
-                        onSave = { cfg ->
-                            main.applyConfig(cfg)
-                            settingsOpen = false
-                        },
+                // Simple saved route: "main", "settings", "automations", "edit:<id>" or "edit:"
+                var route by rememberSaveable { mutableStateOf("main") }
+                when {
+                    route == "settings" -> {
+                        val settings: SettingsViewModel = viewModel()
+                        SettingsScreen(
+                            vm = settings,
+                            onBack = { route = "main" },
+                            onSave = { cfg ->
+                                main.applyConfig(cfg)
+                                route = "main"
+                            },
+                        )
+                    }
+                    route == "automations" -> AutomationsScreen(
+                        onBack = { route = "main" },
+                        onEdit = { id -> route = "edit:" + (id ?: "") },
                     )
-                } else {
-                    MainScreen(main, onOpenSettings = { settingsOpen = true })
+                    route.startsWith("edit:") -> AutomationEditor(
+                        id = route.removePrefix("edit:").ifEmpty { null },
+                        onDone = { route = "automations" },
+                    )
+                    else -> MainScreen(
+                        main,
+                        onOpenSettings = { route = "settings" },
+                        onOpenAutomations = { route = "automations" },
+                    )
                 }
             }
         }

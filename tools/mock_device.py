@@ -172,6 +172,7 @@ def main():
     print(f"mock Tuya {args.version} light on :{args.port}  id={DEVICE_ID} key={LOCAL_KEY.decode()}", flush=True)
     while True:
         conn, addr = srv.accept()
+        conn.settimeout(30)  # like real devices: drop clients that go quiet
         print("client", addr, flush=True)
         session = Session(args.version)
         try:

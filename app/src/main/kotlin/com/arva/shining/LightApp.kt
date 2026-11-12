@@ -20,10 +20,20 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import javax.net.SocketFactory
 
 class LightApp : Application() {
     val store by lazy { ConfigStore(this) }
     val controller by lazy { LightController(store) }
+    val automations by lazy { com.arva.shining.automation.AutomationStore(this) }
+
+    /** For work that must outlive a screen (shortcut commands, automation runs). */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    override fun onCreate() {
+        super.onCreate()
+        com.arva.shining.automation.Scheduler.rescheduleAll(this)
+    }
 }
 
 val Context.lightApp: LightApp get() = applicationContext as LightApp
@@ -69,8 +79,8 @@ class LightController(private val store: ConfigStore) {
 
     data class Snapshot(val schema: LightSchema?, val state: LightState?, val dps: Map<String, Any?>)
 
-    suspend fun status(): Snapshot {
-        val dps = withDevice { it.status() }
+    suspend fun status(socketFactory: SocketFactory? = null): Snapshot {
+        val dps = withDevice(socketFactory) { it.status() }
         val schema = LightDps.detect(dps)?.also { if (store.schema != it) store.schema = it } ?: store.schema
         return Snapshot(schema, schema?.let { LightDps.parse(it, dps) }, dps)
     }
@@ -84,14 +94,35 @@ class LightController(private val store: ConfigStore) {
         withDevice { it.setDps(dps) }
     }
 
+    /**
+     * Runs a [LightCommand]. Reads the light first when the command depends on its current state.
+     * [socketFactory] pins the connection to one network (used right after Wi-Fi connects).
+     * Returns the state read before the command, if one was read.
+     */
+    suspend fun run(command: LightCommand, socketFactory: SocketFactory? = null): Snapshot? {
+        if (command.isEmpty) return null
+        val before = if (command.needsState || store.schema == null) status(socketFactory) else null
+        val schema = before?.schema ?: store.schema
+            ?: throw TuyaException("This device doesn't look like a Tuya light (no DP 1 or 20)")
+        val dps = command.toDps(schema, before?.state)
+        withDevice(socketFactory) { it.setDps(dps) }
+        return before
+    }
+
     fun reset() {
         scope.launch { mutex.withLock { closeLocked() } }
     }
 
-    private suspend fun <T> withDevice(block: (TuyaDevice) -> T): T = mutex.withLock {
+    private suspend fun <T> withDevice(socketFactory: SocketFactory? = null, block: (TuyaDevice) -> T): T = mutex.withLock {
         withContext(Dispatchers.IO) {
             val cfg = store.load()?.takeIf { it.isComplete }
                 ?: throw TuyaException("Set up your light first")
+            if (socketFactory != null) {
+                // One-off connection on a specific network; the light allows one client, so drop ours first.
+                closeLocked()
+                return@withContext TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version, socketFactory = socketFactory)
+                    .use(block)
+            }
             val dev = device?.takeIf { deviceConfig == cfg } ?: run {
                 closeLocked()
                 TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).also { device = it; deviceConfig = cfg }

@@ -19,6 +19,7 @@ import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
+import javax.net.SocketFactory
 
 open class TuyaException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
@@ -44,6 +45,8 @@ class TuyaDevice(
     val version: TuyaVersion,
     val port: Int = 6668,
     private val timeoutMs: Int = 5000,
+    /** Creates the TCP socket; lets Android pin the connection to a specific network (e.g. Wi-Fi). */
+    private val socketFactory: SocketFactory = SocketFactory.getDefault(),
 ) : Closeable {
     private val localKey: ByteArray = localKey.toByteArray(Charsets.UTF_8)
     private var socket: Socket? = null
@@ -69,7 +72,7 @@ class TuyaDevice(
 
     fun connect() {
         close()
-        val s = Socket()
+        val s = socketFactory.createSocket()
         try {
             s.connect(InetSocketAddress(host, port), timeoutMs)
             s.soTimeout = timeoutMs

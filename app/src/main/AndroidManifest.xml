@@ -7,6 +7,13 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
+    <!-- Automations: Wi-Fi arrival, timed runs (exact timing needs the user's OK in settings),
+         rescheduling after reboot, and approximate location for sunset/sunrise only. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:name=".LightApp"
         android:allowBackup="false"
@@ -34,7 +41,53 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="shining" android:host="setup" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- shining://light?power=off etc.: runs a command without UI (shortcuts, NFC, links). -->
+        <activity
+            android:name=".CommandActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="shining" android:host="light" />
+            </intent-filter>
+        </activity>
+
+        <!-- For automation apps (Tasker, MacroDroid): action com.arva.shining.action.LIGHT.
+             Deliberately open: those apps cannot hold a custom permission. Worst case, another app
+             on the phone can switch the light; it cannot read the key or any other data. -->
+        <receiver
+            android:name=".CommandReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.arva.shining.action.LIGHT" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".automation.PresenceJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <receiver
+            android:name=".automation.AutomationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".LightTileService"

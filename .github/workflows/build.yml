@@ -41,7 +41,8 @@ jobs:
 
       - name: Show signing certificate
         run: |
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -m1 "SHA-256"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -m1 "SHA-256"
 
       - uses: actions/upload-artifact@v7
         with:

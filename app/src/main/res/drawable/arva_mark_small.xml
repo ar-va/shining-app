@@ -1,0 +1,5 @@
+<!-- ARVA brand/logo/arva-mark-small-ink-moss.svg (path copied verbatim; do not redraw or recolour). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="100" android:viewportHeight="100">
+    <path android:fillColor="#237A50" android:pathData="M16.33 74.72A7.28 7.28 0 1 1 15.09 60.22A6.92 6.92 0 0 0 19.85 48.57A9.93 9.93 0 0 1 31.44 32.84A4.98 4.98 0 0 0 38.22 26.44A11.25 11.25 0 0 1 56.52 14.09A7.94 7.94 0 0 0 69.23 11.94A14.56 14.56 0 1 1 81.54 32.9A7.94 7.94 0 0 0 78.13 48.18A11.25 11.25 0 1 1 69.31 68.89A4.97 4.97 0 0 0 62.77 75.51A9.93 9.93 0 0 1 46.34 86.28A5.54 5.54 0 0 0 36.68 89.56A7.28 7.28 0 1 1 23.2 85.25A6.96 6.96 0 0 0 16.33 74.72ZM21.95 75.35L25.32 78.72L9.66 94.37L2.92 94.37Z" />
+</vector>

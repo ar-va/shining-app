@@ -1,0 +1,5 @@
+<resources>
+    <!-- ARVA tokens used outside Compose (window, launcher icon). -->
+    <color name="arva_bg">#FDFDFB</color>
+    <color name="arva_night">#15161C</color>
+</resources>

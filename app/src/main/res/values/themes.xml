@@ -1,0 +1,6 @@
+<resources>
+    <!-- Launch window matches the ARVA bg token (Paper) so there is no flash before Compose draws. -->
+    <style name="Theme.Shining" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/arva_bg</item>
+    </style>
+</resources>

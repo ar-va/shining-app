@@ -1,0 +1,6 @@
+<!-- Lucide "sunrise" (ISC), stroke 1.5 per ARVA icon rules. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:strokeLineJoin="round" android:pathData="M12,2v6M4.22,10.22l1.42,1.42M1,18h2M21,18h2M18.36,11.64l1.42,-1.42M23,22H1M16,18a4,4 0,0 0,-8 0M8,6l4,-4l4,4" />
+</vector>

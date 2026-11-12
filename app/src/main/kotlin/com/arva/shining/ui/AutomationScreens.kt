@@ -29,11 +29,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -57,6 +59,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -125,7 +128,7 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Automations run on this phone. They work while it is at home on your Wi-Fi.",
+                "Automations run on this phone. They work while it's at home on your Wi-Fi.",
                 style = MaterialTheme.typography.bodyMedium, color = c.text2,
             )
 
@@ -145,7 +148,13 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             }
 
             if (items.isEmpty()) {
-                Text("No automations yet.", style = MaterialTheme.typography.bodyMedium, color = c.text2)
+                ArvaCard(padding = PaddingValues(24.dp)) {
+                    Text("No automations yet", style = MaterialTheme.typography.titleLarge, color = c.text)
+                    Text(
+                        "Add a schedule, a sunset or sunrise trigger, or have the light come on when you get home.",
+                        style = MaterialTheme.typography.bodyMedium, color = c.text2,
+                    )
+                }
             }
             items.forEach { a -> AutomationCard(a, location, now, results[a.id], onClick = { onEdit(a.id) }) }
 
@@ -177,11 +186,17 @@ private fun AutomationCard(a: Automation, location: GeoPoint?, now: ZonedDateTim
         next != null -> "Next: " + next.format(DateTimeFormatter.ofPattern("EEE HH:mm"))
         else -> "No upcoming run"
     }
+    val icon = when (a.trigger) {
+        is Trigger.Sun -> R.drawable.ic_sun
+        is Trigger.Arrive -> R.drawable.ic_wifi
+        else -> R.drawable.ic_clock
+    }
     ArvaCard(onClick = onClick, padding = PaddingValues(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(a.describeWhen(), style = MaterialTheme.typography.titleSmall, color = c.text)
-                Text(a.command.describe(), style = MaterialTheme.typography.bodyMedium, color = c.text)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            TriggerBadge(icon, a.command, enabled = a.enabled)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(a.command.describe(), style = MaterialTheme.typography.titleSmall, color = if (a.enabled) c.text else c.text2)
+                Text(a.describeWhen(), style = MaterialTheme.typography.bodyMedium, color = c.text2)
                 Text(status, style = MaterialTheme.typography.bodySmall, color = c.text2)
                 result?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.text2) }
             }
@@ -190,6 +205,37 @@ private fun AutomationCard(a: Automation, location: GeoPoint?, now: ZonedDateTim
                 Scheduler.rescheduleAll(context)
             }
         }
+    }
+}
+
+/** A rounded badge: the command's colour behind the trigger-type icon. */
+@Composable
+private fun TriggerBadge(icon: Int, command: com.arva.shining.LightCommand, enabled: Boolean) {
+    val c = Arva.colors
+    val colour = commandColour(command)
+    val bg = if (enabled && colour != null) colour else c.sunken
+    Box(
+        Modifier.size(44.dp).clip(RadiusControl).background(bg).border(1.dp, c.line, RadiusControl),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(icon), contentDescription = null,
+            tint = if (enabled && colour != null) onColourOf(colour) else c.text2,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+/** The colour a command turns the light, or null for off/neutral. */
+private fun commandColour(command: com.arva.shining.LightCommand): Color? {
+    if (command.power == com.arva.shining.LightCommand.Power.OFF) return null
+    val preset = command.preset?.let { com.arva.shining.findPreset(it) }
+    val hue = command.hue?.toFloat() ?: preset?.hue
+    val warmth = command.warmth?.let { it / 100f } ?: preset?.temperature
+    return when {
+        hue != null -> Color.hsv(hue, (command.saturation?.let { it / 100f } ?: preset?.saturation ?: 1f), 1f)
+        warmth != null -> whiteColor(warmth)
+        else -> null
     }
 }
 
@@ -267,11 +313,10 @@ private suspend fun approximateLocation(context: Context): GeoPoint? {
 @Composable
 private fun OtherAppsHelp() {
     val c = Arva.colors
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Eyebrow("Other apps")
-        Text("Use with other apps", style = MaterialTheme.typography.headlineSmall, color = c.text)
+    ArvaCard(padding = PaddingValues(20.dp)) {
+        Text("Use with other apps", style = MaterialTheme.typography.titleLarge, color = c.text)
         Text(
-            "Long-press the Shining icon for quick actions. Links work from NFC tags and any app that opens links:",
+            "Long-press the Shining icon for quick actions. These links work from NFC tags and any app that opens links:",
             style = MaterialTheme.typography.bodySmall, color = c.text2,
         )
         CodeLine("shining://light?power=off")

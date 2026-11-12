@@ -1,5 +1,11 @@
 package com.arva.shining.ui
 
+import com.arva.shining.lightApp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -58,7 +64,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arva.shining.MainViewModel
-import com.arva.shining.PRESETS
 import com.arva.shining.Preset
 import com.arva.shining.R
 import com.arva.shining.UiState
@@ -155,16 +160,69 @@ private fun Controls(s: UiState, vm: MainViewModel) {
         )
     }
 
-    // Presets
+    PresetsSection(s, vm)
+}
+
+/** Editable presets grid: tap to apply, long-press to remove, "+" to save the current colour. */
+@Composable
+private fun PresetsSection(s: UiState, vm: MainViewModel) {
+    val context = LocalContext.current
+    val store = context.lightApp.presetStore
+    val presets by store.items.collectAsStateWithLifecycle()
+    val view = LocalView.current
+    var removing by remember { mutableStateOf<Int?>(null) }
+    var adding by remember { mutableStateOf(false) }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        GroupLabel("Presets")
-        PRESETS.chunked(5).forEach { row ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            GroupLabel("Presets", Modifier.weight(1f))
+            Text("Long-press to remove", style = MaterialTheme.typography.bodySmall, color = Arva.colors.text2)
+        }
+        // The preset tiles followed by an "add" tile, laid out 5 per row.
+        val slots = presets.indices.toList() + ADD_TILE
+        slots.chunked(5).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { p -> PresetSwatch(p, Modifier.weight(1f)) { view.hapticSelect(); vm.applyPreset(p) } }
+                row.forEach { idx ->
+                    if (idx == ADD_TILE) {
+                        AddPresetTile(Modifier.weight(1f)) { view.hapticSelect(); adding = true }
+                    } else {
+                        val p = presets[idx]
+                        PresetSwatch(
+                            p, Modifier.weight(1f),
+                            onClick = { view.hapticSelect(); vm.applyPreset(p) },
+                            onLongClick = { view.hapticTick(); removing = idx },
+                        )
+                    }
+                }
+                repeat(5 - row.size) { Box(Modifier.weight(1f)) } // keep tile widths consistent
             }
         }
     }
+
+    if (adding) {
+        AddPresetDialog(
+            defaultName = if (s.colourMode) colourName(s.hue) else warmthName(s.temperature),
+            onDismiss = { adding = false },
+            onSave = { name ->
+                val preset = if (s.colourMode) Preset(name, hue = s.hue, saturation = s.saturation)
+                else Preset(name, temperature = s.temperature)
+                store.add(preset)
+                adding = false
+            },
+        )
+    }
+    removing?.let { idx ->
+        val label = presets.getOrNull(idx)?.label ?: ""
+        ConfirmDialog(
+            title = "Remove \"$label\"?",
+            confirm = "Remove",
+            onConfirm = { store.removeAt(idx); removing = null },
+            onDismiss = { removing = null },
+        )
+    }
 }
+
+private const val ADD_TILE = -1
 
 /** Small pill shown only when there's something to say (updating / offline). */
 @Composable
@@ -197,8 +255,8 @@ private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
     val track = if (s.on) lerp(base, c.bg, 0.82f) else c.sunken  // the empty remainder
     val fillColour by animateColorAsState(lit, tween(motionMs(260)), label = "heroFill")
     val trackColour by animateColorAsState(track, tween(motionMs(260)), label = "heroTrack")
-    // Fill shows brightness when on; empties when off.
-    val fraction by animateFloatAsState(if (s.on) s.brightness.coerceIn(0.04f, 1f) else 0f, tween(motionMs(260)), label = "heroFraction")
+    // Fill width tracks brightness directly (no tween) so dragging follows the finger 1:1.
+    val fraction = if (s.on) s.brightness.coerceIn(0.04f, 1f) else 0f
     val onFill = if (s.on) onColourOf(base) else c.text2
 
     var widthPx by remember { mutableFloatStateOf(1f) }
@@ -258,14 +316,15 @@ private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PresetSwatch(p: Preset, modifier: Modifier, onClick: () -> Unit) {
+private fun PresetSwatch(p: Preset, modifier: Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = Arva.colors
     val colour = if (p.temperature != null) whiteColor(p.temperature) else Color.hsv(p.hue ?: 0f, p.saturation, 1f)
     Column(
         modifier
             .clip(RadiusControl)
-            .clickable(onClickLabel = "Set ${p.label}", onClick = onClick)
+            .combinedClickable(onClickLabel = "Set ${p.label}", onLongClickLabel = "Remove ${p.label}", onClick = onClick, onLongClick = onLongClick)
             .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -280,4 +339,55 @@ private fun PresetSwatch(p: Preset, modifier: Modifier, onClick: () -> Unit) {
         )
         Text(p.label, style = MaterialTheme.typography.bodySmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize), color = c.text2, maxLines = 1)
     }
+}
+
+/** The "+" tile that saves the current colour as a new preset. */
+@Composable
+private fun AddPresetTile(modifier: Modifier, onClick: () -> Unit) {
+    val c = Arva.colors
+    Column(
+        modifier.clip(RadiusControl).clickable(onClickLabel = "Save current colour", onClick = onClick).padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(1f).clip(RadiusControl).background(c.sunken).border(1.dp, c.line, RadiusControl),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("+", style = MaterialTheme.typography.headlineMedium, color = c.accent)
+        }
+        Text("Save", style = MaterialTheme.typography.bodySmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize), color = c.text2, maxLines = 1)
+    }
+}
+
+@Composable
+private fun AddPresetDialog(defaultName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    val c = Arva.colors
+    var name by remember { mutableStateOf(defaultName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.surface,
+        shape = RadiusCard,
+        title = { Text("Save preset", color = c.text) },
+        text = {
+            ArvaField(name, { name = it }, "Name")
+        },
+        confirmButton = {
+            TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim()) }) { Text("Save", color = c.accent) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.text2) } },
+    )
+}
+
+@Composable
+private fun ConfirmDialog(title: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val c = Arva.colors
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.surface,
+        shape = RadiusCard,
+        title = { Text(title, color = c.text) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm, color = c.error) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.text2) } },
+    )
 }

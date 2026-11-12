@@ -188,7 +188,25 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
             }
 
             AppearanceCard()
+            PresetsCard()
         }
+    }
+}
+
+/** Reset the main-screen presets back to the built-in set. */
+@Composable
+private fun PresetsCard() {
+    val c = Arva.colors
+    val context = LocalContext.current
+    SettingCard("Presets") {
+        Text(
+            "Add your own on the main screen with +, or long-press one to remove it.",
+            style = MaterialTheme.typography.bodySmall, color = c.text2,
+        )
+        SecondaryButton("Reset to default", onClick = {
+            context.lightApp.presetStore.resetToDefault()
+            Toast.makeText(context, "Presets reset", Toast.LENGTH_SHORT).show()
+        })
     }
 }
 

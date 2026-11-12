@@ -23,13 +23,15 @@ data class LightCommand(
     val hue: Int? = null,
     val saturation: Int? = null,
     val warmth: Int? = null,
+    /** Set the colour/brightness but leave the light off, so it's ready for the next manual on. */
+    val keepOff: Boolean = false,
 ) {
     enum class Power { ON, OFF, TOGGLE }
 
     val isEmpty: Boolean get() = this == LightCommand()
 
     /** True when the current light state is needed to build the DPs. */
-    val needsState: Boolean get() = power == Power.TOGGLE || (power != Power.OFF && brightness == null) ||
+    val needsState: Boolean get() = power == Power.TOGGLE || (!keepOff && power != Power.OFF && brightness == null) ||
         (brightness != null && preset == null && hue == null && warmth == null)
 
     fun toQuery(): String = listOfNotNull(
@@ -39,18 +41,20 @@ data class LightCommand(
         hue?.let { "hue=$it" },
         saturation?.let { "saturation=$it" },
         warmth?.let { "warmth=$it" },
+        if (keepOff) "keepoff=1" else null,
     ).joinToString("&")
 
     /** Short human description, e.g. "Turn off", "Warm at 40%". */
     fun describe(): String {
         val pct = brightness?.let { " at $it%" } ?: ""
+        val tail = if (keepOff) ", stays off" else ""
         return when {
             power == Power.OFF -> "Turn off"
             power == Power.TOGGLE -> "Switch on or off"
-            preset != null -> "${findPreset(preset)?.label ?: preset}$pct"
-            hue != null -> "Colour ${hue}°$pct"
-            warmth != null -> "White, ${if (warmth < 50) "warm" else "cool"}$pct"
-            brightness != null -> "Brightness $brightness%"
+            preset != null -> "${findPreset(preset)?.label ?: preset}$pct$tail"
+            hue != null -> "Colour ${hue}°$pct$tail"
+            warmth != null -> "White, ${if (warmth < 50) "warm" else "cool"}$pct$tail"
+            brightness != null -> "Brightness $brightness%$tail"
             else -> "Turn on"
         }
     }
@@ -68,7 +72,7 @@ data class LightCommand(
         val p = preset?.let { findPreset(it) }
         val targetHue = hue?.toFloat() ?: p?.hue
         val targetWarmth = warmth?.let { it / 100f } ?: p?.temperature
-        return when {
+        val dps = when {
             targetHue != null -> {
                 val sat = saturation?.let { it / 100f } ?: p?.saturation ?: 1f
                 LightDps.colour(schema, Hsv(targetHue.coerceIn(0f, 360f), sat.coerceIn(0f, 1f), b))
@@ -82,6 +86,9 @@ data class LightCommand(
             }
             else -> LightDps.power(schema, true)
         }
+        // "Keep off": apply the colour/brightness but override the switch to off, so the light
+        // stays dark and shows this look the next time it's turned on.
+        return if (keepOff) dps + LightDps.power(schema, false) else dps
     }
 
     companion object {
@@ -108,6 +115,7 @@ data class LightCommand(
                 hue = int("hue", 0..360),
                 saturation = int("saturation", 0..100),
                 warmth = int("warmth", 0..100),
+                keepOff = values["keepoff"]?.trim()?.lowercase() in setOf("1", "true", "yes"),
             )
         }
     }

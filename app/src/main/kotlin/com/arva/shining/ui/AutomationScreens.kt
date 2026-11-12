@@ -68,7 +68,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arva.shining.LightCommand
-import com.arva.shining.PRESETS
+import com.arva.shining.DEFAULT_PRESETS
+import com.arva.shining.findPreset
+import com.arva.shining.lightApp
 import com.arva.shining.R
 import com.arva.shining.automation.Automation
 import com.arva.shining.automation.GeoPoint
@@ -380,6 +382,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
     }
     var preset by rememberSaveable { mutableStateOf(cmd?.preset ?: "Warm") }
     var brightness by rememberSaveable { mutableStateOf(cmd?.brightness ?: 60) }
+    var keepOff by rememberSaveable { mutableStateOf(cmd?.keepOff ?: false) }
     var picking by remember { mutableStateOf<String?>(null) } // "time" | "quiet"
 
     fun build(): Automation {
@@ -392,7 +395,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
         val command = when (doKind) {
             DoKind.ON -> LightCommand(power = LightCommand.Power.ON)
             DoKind.OFF -> LightCommand(power = LightCommand.Power.OFF)
-            DoKind.PRESET -> LightCommand(preset = preset, brightness = brightness)
+            DoKind.PRESET -> LightCommand(preset = preset, brightness = brightness, keepOff = keepOff)
         }
         val base = existing ?: Automation(trigger = trigger, command = command)
         return base.copy(trigger = trigger, command = command, days = days.map { DayOfWeek.of(it) }.toSet())
@@ -443,13 +446,20 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                 Segmented(DoKind.entries.map { it to it.label }, doKind, { doKind = it })
                 if (doKind == DoKind.PRESET) {
                     PresetChooser(preset) { preset = it }
-                    val p = PRESETS.firstOrNull { it.label == preset }
+                    val p = findPreset(preset)
                     val colour = if (p?.temperature != null) whiteColor(p.temperature) else Color.hsv(p?.hue ?: 0f, p?.saturation ?: 1f, 1f)
                     ColorSlider(
                         "Brightness", brightness / 100f, "$brightness%",
                         { brightness = (it * 100).roundToInt().coerceIn(1, 100) },
                         Brush.horizontalGradient(listOf(if (c == ArvaDark) c.bg else c.text, colour)),
                     )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Keep the light off", style = MaterialTheme.typography.titleSmall, color = c.text)
+                            Text("Set this look but leave the light off, so it's ready the next time you turn it on.", style = MaterialTheme.typography.bodySmall, color = c.text2)
+                        }
+                        ArvaSwitch(keepOff, "Keep the light off") { keepOff = it }
+                    }
                 }
             }
 
@@ -531,8 +541,9 @@ private fun DayToggles(days: Set<Int>, onChange: (Set<Int>) -> Unit) {
 @Composable
 private fun PresetChooser(selected: String, onSelect: (String) -> Unit) {
     val c = Arva.colors
+    val presets by LocalContext.current.lightApp.presetStore.items.collectAsStateWithLifecycle()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PRESETS.chunked(5).forEach { row ->
+        presets.chunked(5).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 row.forEach { p ->
                     val on = p.label == selected

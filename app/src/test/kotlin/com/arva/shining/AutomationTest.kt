@@ -123,6 +123,16 @@ class LightCommandTest {
         assertTrue(LightCommand.parse("").isEmpty)
     }
 
+    @Test fun `keep off applies colour but switches off`() {
+        val c = LightCommand.parse("preset=Warm&brightness=100&keepoff=1")
+        assertTrue(c.keepOff)
+        assertEquals(c, LightCommand.parse(c.toQuery()))
+        val dps = c.toDps(LightSchema.V2, null)
+        assertEquals(false, dps["20"]) // switch off
+        assertEquals("white", dps["21"]) // but warm white is set
+        assertEquals(1000, dps["22"]) // at 100%
+    }
+
     @Test fun `off and toggle`() {
         assertEquals(mapOf("20" to false), LightCommand.parse("power=off").toDps(LightSchema.V2, null))
         assertEquals(mapOf("20" to false), LightCommand.parse("power=toggle").toDps(LightSchema.V2, white))

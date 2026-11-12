@@ -38,7 +38,8 @@ object OpenBekenProtocol {
         val hue = command.hue ?: preset?.hue?.roundToInt()
         val warmth = command.warmth ?: preset?.temperature?.let { (it * 100).roundToInt() }
 
-        val out = mutableListOf("led_enableAll 1")
+        // Keep off: set the stored colour/brightness but don't enable; otherwise turn on first.
+        val out = if (command.keepOff) mutableListOf() else mutableListOf("led_enableAll 1")
         when {
             hue != null -> {
                 val sat = command.saturation ?: preset?.saturation?.let { (it * 100).roundToInt() } ?: 100
@@ -52,6 +53,8 @@ object OpenBekenProtocol {
             command.brightness != null -> out += "Dimmer $b" // brightness only: keep current mode
             // plain "on": nothing more to send
         }
+        // Ensure it ends up off after storing the look.
+        if (command.keepOff) out += "led_enableAll 0"
         return out
     }
 

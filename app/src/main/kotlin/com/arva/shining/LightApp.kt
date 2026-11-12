@@ -29,12 +29,14 @@ class LightApp : Application() {
     val controller by lazy { LightController(store) }
     val automations by lazy { com.arva.shining.automation.AutomationStore(this) }
     val themeStore by lazy { ThemeStore(this) }
+    val presetStore by lazy { PresetStore(this) }
 
     /** For work that must outlive a screen (shortcut commands, automation runs). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
+        presetStore // load custom presets early so automations can resolve their names
         com.arva.shining.automation.Scheduler.rescheduleAll(this)
     }
 }

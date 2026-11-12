@@ -43,6 +43,12 @@ class OpenBekenProtocolTest {
         )
     }
 
+    @Test fun `keep off sets values then disables`() {
+        val cmds = OpenBekenProtocol.commandsFor(LightCommand(preset = "Warm", brightness = 100, keepOff = true), null)
+        assertEquals(listOf("CT 500", "Dimmer 100", "led_enableAll 0"), cmds)
+        assertTrue("led_enableAll 1" !in cmds)
+    }
+
     @Test fun `ct mapping round trips`() {
         assertEquals(500, OpenBekenProtocol.warmthToCt(0f))
         assertEquals(154, OpenBekenProtocol.warmthToCt(1f))

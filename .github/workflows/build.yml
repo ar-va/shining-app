@@ -23,8 +23,25 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # Permanent release key from repository secrets (absent for forks: falls back to debug signing).
+      - name: Restore signing key
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        if: env.SIGNING_KEYSTORE_BASE64 != ''
+        run: |
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "SHINING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
       - name: Test and build
+        env:
+          SHINING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SHINING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SHINING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: ./gradlew :tuya:test assembleRelease
+
+      - name: Show signing certificate
+        run: |
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -m1 "SHA-256"
 
       - uses: actions/upload-artifact@v7
         with:

@@ -3,9 +3,27 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Permanent release key: Gradle properties (~/.gradle/gradle.properties on the owner's Mac)
+// or environment variables (CI secrets). Without them, release builds use the debug key.
+fun signingValue(property: String, env: String): String? =
+    providers.gradleProperty(property).orElse(providers.environmentVariable(env)).orNull?.takeIf { it.isNotBlank() }
+
+val releaseKeystore = signingValue("shining.keystore", "SHINING_KEYSTORE")
+
 android {
     namespace = "com.arva.shining"
     compileSdk = 37
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = signingValue("shining.storePassword", "SHINING_STORE_PASSWORD")
+                keyAlias = signingValue("shining.keyAlias", "SHINING_KEY_ALIAS")
+                keyPassword = signingValue("shining.keyPassword", "SHINING_KEY_PASSWORD")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.arva.shining"
@@ -20,8 +38,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Personal sideloaded app: sign release with the local debug key so it installs directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

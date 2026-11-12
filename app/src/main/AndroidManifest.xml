@@ -16,6 +16,7 @@
 
     <application
         android:name=".LightApp"
+        android:enableOnBackInvokedCallback="true"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -24,7 +25,8 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Shining">
+        android:theme="@style/Theme.Shining"
+        tools:ignore="UnusedAttribute">
 
         <activity
             android:name=".MainActivity"

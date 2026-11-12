@@ -9,7 +9,6 @@ import android.location.LocationManager
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -113,7 +112,6 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             now = ZonedDateTime.now()
         }
     }
-    BackHandler(onBack = onBack)
 
     val needsLocation = items.any { a ->
         a.enabled && (a.trigger is Trigger.Sun || (a.trigger as? Trigger.Arrive)?.afterDark == true)
@@ -351,7 +349,6 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
     val store = context.lightApp.automations
     val existing = remember(id) { id?.let { store.get(it) } }
     val c = Arva.colors
-    BackHandler(onBack = onDone)
 
     // Draft state, seeded from the automation being edited.
     val t = existing?.trigger

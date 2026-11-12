@@ -1,7 +1,6 @@
 package com.arva.shining.ui
 
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,7 +43,6 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
     val c = Arva.colors
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
-    BackHandler(onBack = onBack)
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
         ArvaHeader(title = "Light setup", navigation = { HeaderIcon(R.drawable.ic_arrow_left, "Back", onBack) })

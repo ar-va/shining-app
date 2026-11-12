@@ -28,6 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,7 +108,7 @@ private fun Controls(s: UiState, vm: MainViewModel) {
         StatusChip(s)
     }
 
-    LightHero(s, onToggle = vm::togglePower)
+    LightHero(s, onToggle = vm::togglePower, onBrightnessDelta = vm::nudgeBrightness)
 
     // Adjustments
     ArvaCard {
@@ -155,9 +160,12 @@ private fun StatusChip(s: UiState) {
     }
 }
 
-/** The living colour hero: fills with the light's colour, tap to toggle, state shown inside. */
+/**
+ * The living colour hero: fills with the light's colour, tap to toggle, drag sideways to dim,
+ * state shown inside.
+ */
 @Composable
-private fun LightHero(s: UiState, onToggle: () -> Unit) {
+private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightnessDelta: (Float) -> Unit) {
     val c = Arva.colors
     val dim = if (c == ArvaDark) c.bg else c.text
     val base = lightColourOf(s)
@@ -169,6 +177,7 @@ private fun LightHero(s: UiState, onToggle: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val pressScale by animateFloatAsState(if (pressed) 0.985f else 1f, tween(120), label = "heroPress")
+    var widthPx by remember { mutableFloatStateOf(1f) }
 
     ArvaCard(padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
         Box(
@@ -179,6 +188,14 @@ private fun LightHero(s: UiState, onToggle: () -> Unit) {
                 .clip(RadiusCard)
                 .background(if (s.on) Brush.radialGradient(listOf(lerp(fill, Color.White, 0.16f), fill)) else Brush.linearGradient(listOf(fill, fill)))
                 .border(1.dp, c.line, RadiusCard)
+                .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
+                // Drag sideways to set brightness (consumes horizontal moves; vertical page scroll stays).
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures { change, dragAmount ->
+                        change.consume()
+                        onBrightnessDelta(dragAmount / widthPx)
+                    }
+                }
                 .clickable(interactionSource = interaction, indication = null, role = Role.Switch, onClickLabel = if (s.on) "Turn off" else "Turn on", onClick = onToggle)
                 .padding(16.dp)
                 .semantics {

@@ -119,6 +119,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         sendCurrentMode()
     }
 
+    /** Adjust brightness by a relative amount (e.g. from dragging across the hero). */
+    fun nudgeBrightness(delta: Float) {
+        if (delta == 0f) return
+        setBrightness((_state.value.brightness + delta).coerceIn(0.01f, 1f))
+    }
+
     fun applyPreset(p: Preset) {
         _state.update {
             if (p.temperature != null) it.copy(colourMode = false, temperature = p.temperature, on = true)

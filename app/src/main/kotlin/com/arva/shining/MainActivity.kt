@@ -16,6 +16,7 @@ import com.arva.shining.ui.ShiningTheme
 import com.arva.shining.ui.AutomationEditor
 import com.arva.shining.ui.AutomationsScreen
 import com.arva.shining.ui.MainScreen
+import com.arva.shining.ui.PredictiveBackScreen
 import com.arva.shining.ui.SettingsScreen
 import com.arva.tuya.DeviceConfig
 
@@ -31,7 +32,7 @@ class MainActivity : ComponentActivity() {
                 // Simple saved route: "main", "settings", "automations", "edit:<id>" or "edit:"
                 var route by rememberSaveable { mutableStateOf("main") }
                 when {
-                    route == "settings" -> {
+                    route == "settings" -> PredictiveBackScreen(onBack = { route = "main" }) {
                         val settings: SettingsViewModel = viewModel()
                         SettingsScreen(
                             vm = settings,
@@ -42,14 +43,18 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                     }
-                    route == "automations" -> AutomationsScreen(
-                        onBack = { route = "main" },
-                        onEdit = { id -> route = "edit:" + (id ?: "") },
-                    )
-                    route.startsWith("edit:") -> AutomationEditor(
-                        id = route.removePrefix("edit:").ifEmpty { null },
-                        onDone = { route = "automations" },
-                    )
+                    route == "automations" -> PredictiveBackScreen(onBack = { route = "main" }) {
+                        AutomationsScreen(
+                            onBack = { route = "main" },
+                            onEdit = { id -> route = "edit:" + (id ?: "") },
+                        )
+                    }
+                    route.startsWith("edit:") -> PredictiveBackScreen(onBack = { route = "automations" }) {
+                        AutomationEditor(
+                            id = route.removePrefix("edit:").ifEmpty { null },
+                            onDone = { route = "automations" },
+                        )
+                    }
                     else -> MainScreen(
                         main,
                         onOpenSettings = { route = "settings" },

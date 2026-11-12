@@ -126,6 +126,17 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
 /** Listens for Tuya UDP broadcasts on the local Wi-Fi. */
 object LanDiscovery {
+    /** Finds the current IP of the device with [deviceId] by listening briefly, or null. */
+    suspend fun findIp(context: Context, deviceId: String, durationMs: Long = 6_000): String? {
+        var ip: String? = null
+        runCatching {
+            kotlinx.coroutines.withTimeoutOrNull(durationMs + 1_000) {
+                scan(context, durationMs).collect { if (it.id == deviceId) { ip = it.ip; throw kotlinx.coroutines.CancellationException("found") } }
+            }
+        }
+        return ip
+    }
+
     fun scan(context: Context, durationMs: Long = 8_000): Flow<DiscoveredDevice> = channelFlow {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val lock = wifi.createMulticastLock("lightstrip-discovery").apply { setReferenceCounted(false); acquire() }

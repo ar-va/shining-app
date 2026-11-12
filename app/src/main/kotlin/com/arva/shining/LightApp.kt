@@ -71,13 +71,42 @@ class ConfigStore(context: Context) {
             putString("name", cfg.name); putString("id", cfg.id); putString("ip", cfg.ip)
             putString("key", cfg.localKey); putString("version", cfg.version.text)
             remove("schema")
+            // A different device: forget the cached look.
+            listOf("st_on", "st_colour", "st_hue", "st_sat", "st_bright", "st_temp").forEach(::remove)
         }
     }
+
+    /** Updates the device's IP in place (used when it moves to a new address). */
+    fun updateIp(ip: String) = prefs.edit { putString("ip", ip) }
 
     var schema: LightSchema?
         get() = prefs.getString("schema", null)?.let { runCatching { LightSchema.valueOf(it) }.getOrNull() }
         set(value) = prefs.edit { putString("schema", value?.name) }
+
+    /** Last seen light state, shown instantly on open before the live read lands. */
+    fun loadState(): CachedLightState? {
+        if (!prefs.contains("st_on")) return null
+        return CachedLightState(
+            on = prefs.getBoolean("st_on", false),
+            colourMode = prefs.getBoolean("st_colour", true),
+            hue = prefs.getFloat("st_hue", 30f),
+            saturation = prefs.getFloat("st_sat", 1f),
+            brightness = prefs.getFloat("st_bright", 1f),
+            temperature = prefs.getFloat("st_temp", 0.3f),
+        )
+    }
+
+    fun saveState(s: CachedLightState) = prefs.edit {
+        putBoolean("st_on", s.on); putBoolean("st_colour", s.colourMode)
+        putFloat("st_hue", s.hue); putFloat("st_sat", s.saturation)
+        putFloat("st_bright", s.brightness); putFloat("st_temp", s.temperature)
+    }
 }
+
+data class CachedLightState(
+    val on: Boolean, val colourMode: Boolean, val hue: Float,
+    val saturation: Float, val brightness: Float, val temperature: Float,
+)
 
 /**
  * Single owner of the connection to the light. Serializes calls, reuses a Tuya socket while in use

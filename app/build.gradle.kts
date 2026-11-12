@@ -29,8 +29,8 @@ android {
         applicationId = "com.arva.shining"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6.0"
+        versionCode = 8
+        versionName = "1.7.0"
     }
 
     buildTypes {
@@ -66,6 +66,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.13.0")
 
+    // In-app QR scanning for the setup link: CameraX preview + ZXing decode (on-device, no Google Play Services).
+    implementation("androidx.camera:camera-camera2:1.6.2")
+    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-view:1.6.2")
+    implementation("com.google.zxing:core:3.5.4")
+
     testImplementation("junit:junit:4.13.2")
 }
 
@@ -75,12 +81,15 @@ tasks.matching { it.name == "assembleRelease" || it.name == "assembleDebug" }.co
     val type = if (name.contains("Release")) "Release" else "Debug"
     finalizedBy("nameApk$type")
 }
+// Captured at configuration time (a plain String) so the tasks are configuration-cache compatible.
+val appVersionName = android.defaultConfig.versionName
 listOf("release", "debug").forEach { type ->
     val cap = type.replaceFirstChar { it.uppercase() }
     tasks.register<Copy>("nameApk$cap") {
         from(layout.buildDirectory.dir("outputs/apk/$type")) { include("app-$type.apk") }
         into(layout.buildDirectory.dir("named-apk"))
         val suffix = if (type == "debug") "-debug" else ""
-        rename { "Shining-${android.defaultConfig.versionName}$suffix.apk" }
+        // Regex form (not a closure) so the task is configuration-cache compatible.
+        rename("app-$type\\.apk", "Shining-$appVersionName$suffix.apk")
     }
 }

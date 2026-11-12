@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,8 +32,23 @@ class MainActivity : ComponentActivity() {
             ShiningTheme {
                 // Simple saved route: "main", "settings", "automations", "edit:<id>" or "edit:"
                 var route by rememberSaveable { mutableStateOf("main") }
+                // The home screen, reused both as the active route and as the "behind" page for
+                // predictive back previews.
+                val home = @Composable {
+                    MainScreen(
+                        main,
+                        onOpenSettings = { route = "settings" },
+                        onOpenAutomations = { route = "automations" },
+                    )
+                }
+                val automations = @Composable {
+                    AutomationsScreen(
+                        onBack = { route = "main" },
+                        onEdit = { id -> route = "edit:" + (id ?: "") },
+                    )
+                }
                 when {
-                    route == "settings" -> PredictiveBackScreen(onBack = { route = "main" }) {
+                    route == "settings" -> PredictiveBackScreen(onBack = { route = "main" }, behind = home) {
                         val settings: SettingsViewModel = viewModel()
                         SettingsScreen(
                             vm = settings,
@@ -43,23 +59,14 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                     }
-                    route == "automations" -> PredictiveBackScreen(onBack = { route = "main" }) {
-                        AutomationsScreen(
-                            onBack = { route = "main" },
-                            onEdit = { id -> route = "edit:" + (id ?: "") },
-                        )
-                    }
-                    route.startsWith("edit:") -> PredictiveBackScreen(onBack = { route = "automations" }) {
+                    route == "automations" -> PredictiveBackScreen(onBack = { route = "main" }, behind = home, content = automations)
+                    route.startsWith("edit:") -> PredictiveBackScreen(onBack = { route = "automations" }, behind = automations) {
                         AutomationEditor(
                             id = route.removePrefix("edit:").ifEmpty { null },
                             onDone = { route = "automations" },
                         )
                     }
-                    else -> MainScreen(
-                        main,
-                        onOpenSettings = { route = "settings" },
-                        onOpenAutomations = { route = "automations" },
-                    )
+                    else -> home()
                 }
             }
         }

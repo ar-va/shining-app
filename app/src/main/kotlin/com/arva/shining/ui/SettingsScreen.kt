@@ -1,5 +1,13 @@
 package com.arva.shining.ui
 
+import androidx.core.content.ContextCompat
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.pm.PackageManager
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
 import com.arva.shining.lightApp
 import com.arva.shining.ThemeMode
 import androidx.compose.runtime.collectAsState
@@ -48,6 +56,29 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
+    // In-app QR scanner (CameraX + ZXing). Shown as a full-screen overlay once camera is allowed.
+    var showScanner by remember { mutableStateOf(false) }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) showScanner = true
+        else Toast.makeText(context, "Camera permission is needed to scan", Toast.LENGTH_SHORT).show()
+    }
+    fun scanQr() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) showScanner = true
+        else cameraPermission.launch(Manifest.permission.CAMERA)
+    }
+
+    if (showScanner) {
+        QrScannerOverlay(
+            onResult = { text ->
+                showScanner = false
+                if (vm.pasteLink(text)) Toast.makeText(context, "Setup link scanned", Toast.LENGTH_SHORT).show()
+                else Toast.makeText(context, "That QR isn't a Shining setup link", Toast.LENGTH_SHORT).show()
+            },
+            onClose = { showScanner = false },
+        )
+        return
+    }
+
     Column(Modifier.fillMaxSize().background(c.bg)) {
         ArvaHeader(title = "Settings", navigation = { HeaderIcon(R.drawable.ic_arrow_left, "Back", onBack) })
         Column(
@@ -77,14 +108,15 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                         style = MaterialTheme.typography.bodyMedium, color = c.text2,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SecondaryButton("Scan QR", onClick = { scanQr() })
                         SecondaryButton(if (s.scanning) "Listening…" else "Scan Wi-Fi", vm::scan, enabled = !s.scanning)
-                        TextLink("Paste link", onClick = {
-                            if (!vm.pasteLink(clipboard.getText()?.text)) {
-                                Toast.makeText(context, "The clipboard has no shining:// setup link", Toast.LENGTH_SHORT).show()
-                            }
-                        })
                         if (s.scanning) CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
                     }
+                    TextLink("Paste setup link", onClick = {
+                        if (!vm.pasteLink(clipboard.getText()?.text)) {
+                            Toast.makeText(context, "The clipboard has no shining:// setup link", Toast.LENGTH_SHORT).show()
+                        }
+                    })
                     s.scanMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.text2) }
                     s.found.forEachIndexed { i, d ->
                         if (i == 0) HorizontalDivider(color = c.line)

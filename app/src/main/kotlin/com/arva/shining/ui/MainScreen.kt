@@ -1,5 +1,14 @@
 package com.arva.shining.ui
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import kotlinx.coroutines.delay
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -59,6 +68,20 @@ import kotlin.math.roundToInt
 fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val c = Arva.colors
+
+    // Live sync: while the screen is on top, poll quietly so external changes (voice, another phone)
+    // show up and the socket stays warm for snappy slider response.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(s.configured) {
+        if (!s.configured) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                delay(4_000)
+                vm.refresh(showLoading = false)
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(c.bg)) {
         ArvaHeader("Shining") {
             if (s.configured) {
@@ -101,6 +124,8 @@ private fun SetupPrompt(onOpenSettings: () -> Unit) {
 @Composable
 private fun Controls(s: UiState, vm: MainViewModel) {
     val c = Arva.colors
+    val view = LocalView.current
+    val toggle = { view.hapticTick(); vm.togglePower() }
 
     // Title + a quiet live status chip.
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -108,7 +133,7 @@ private fun Controls(s: UiState, vm: MainViewModel) {
         StatusChip(s)
     }
 
-    LightHero(s, onToggle = vm::togglePower, onBrightnessDelta = vm::nudgeBrightness)
+    LightHero(s, onToggle = toggle, onBrightness = vm::setBrightness)
 
     // Adjustments
     ArvaCard {
@@ -135,7 +160,7 @@ private fun Controls(s: UiState, vm: MainViewModel) {
         GroupLabel("Presets")
         PRESETS.chunked(5).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { p -> PresetSwatch(p, Modifier.weight(1f)) { vm.applyPreset(p) } }
+                row.forEach { p -> PresetSwatch(p, Modifier.weight(1f)) { view.hapticSelect(); vm.applyPreset(p) } }
             }
         }
     }
@@ -161,23 +186,24 @@ private fun StatusChip(s: UiState) {
 }
 
 /**
- * The living colour hero: fills with the light's colour, tap to toggle, drag sideways to dim,
- * state shown inside.
+ * The light hero as a Google-Home-style brightness bar: the filled width shows brightness in the
+ * light's colour, the rest is a dim track. Tap toggles; drag along it sets brightness by position.
  */
 @Composable
-private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightnessDelta: (Float) -> Unit) {
+private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightness: (Float) -> Unit) {
     val c = Arva.colors
-    val dim = if (c == ArvaDark) c.bg else c.text
     val base = lightColourOf(s)
-    // Modulate luminance by brightness so a dim light looks dim.
-    val litTarget = lerp(dim, base, 0.45f + 0.55f * s.brightness.coerceIn(0f, 1f))
-    val fill by animateColorAsState(if (s.on) litTarget else c.sunken, tween(260), label = "heroFill")
-    val onFill = if (s.on) onColourOf(fill) else c.text2
+    val lit = if (s.on) base else c.sunken                       // the filled, "bright" part
+    val track = if (s.on) lerp(base, c.bg, 0.82f) else c.sunken  // the empty remainder
+    val fillColour by animateColorAsState(lit, tween(motionMs(260)), label = "heroFill")
+    val trackColour by animateColorAsState(track, tween(motionMs(260)), label = "heroTrack")
+    // Fill shows brightness when on; empties when off.
+    val fraction by animateFloatAsState(if (s.on) s.brightness.coerceIn(0.04f, 1f) else 0f, tween(motionMs(260)), label = "heroFraction")
+    val onFill = if (s.on) onColourOf(base) else c.text2
 
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val pressScale by animateFloatAsState(if (pressed) 0.985f else 1f, tween(120), label = "heroPress")
     var widthPx by remember { mutableFloatStateOf(1f) }
+    var pressed by remember { mutableStateOf(false) }
+    val pressScale by animateFloatAsState(if (pressed) 0.99f else 1f, tween(motionMs(120)), label = "heroPress")
 
     ArvaCard(padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
         Box(
@@ -186,24 +212,37 @@ private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightnessDelta: (Floa
                 .aspectRatio(1.9f)
                 .scale(pressScale)
                 .clip(RadiusCard)
-                .background(if (s.on) Brush.radialGradient(listOf(lerp(fill, Color.White, 0.16f), fill)) else Brush.linearGradient(listOf(fill, fill)))
+                .background(trackColour)
                 .border(1.dp, c.line, RadiusCard)
                 .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
-                // Drag sideways to set brightness (consumes horizontal moves; vertical page scroll stays).
+                // Drag anywhere along the bar to set brightness by position (absolute, like Google Home).
                 .pointerInput(Unit) {
-                    detectHorizontalDragGestures { change, dragAmount ->
+                    detectHorizontalDragGestures(
+                        onDragStart = { onBrightness((it.x / widthPx).coerceIn(0f, 1f)) },
+                    ) { change, _ ->
                         change.consume()
-                        onBrightnessDelta(dragAmount / widthPx)
+                        onBrightness((change.position.x / widthPx).coerceIn(0f, 1f))
                     }
                 }
-                .clickable(interactionSource = interaction, indication = null, role = Role.Switch, onClickLabel = if (s.on) "Turn off" else "Turn on", onClick = onToggle)
-                .padding(16.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = { pressed = true; tryAwaitRelease(); pressed = false },
+                        onTap = { onToggle() },
+                    )
+                }
                 .semantics {
                     contentDescription = "Light"
                     stateDescription = if (s.on) stateDescriptor(s) else "Off"
                 },
             contentAlignment = Alignment.BottomStart,
         ) {
+            // Filled portion = brightness level, in the light's colour with a soft emission highlight.
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(fraction)
+                    .background(if (s.on) Brush.verticalGradient(listOf(lerp(fillColour, Color.White, 0.12f), fillColour)) else Brush.linearGradient(listOf(fillColour, fillColour))),
+            )
             Text(
                 text = when {
                     !s.connected && s.error == null -> "Connecting…"
@@ -212,6 +251,7 @@ private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightnessDelta: (Floa
                 },
                 style = MaterialTheme.typography.titleSmall,
                 color = onFill,
+                modifier = Modifier.padding(16.dp),
             )
         }
         PrimaryButton(if (s.on) "Turn off" else "Turn on", onToggle, Modifier.fillMaxWidth())

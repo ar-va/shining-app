@@ -8,6 +8,8 @@ It replaces the Smart Life app for day-to-day control:
 - **Device controls** (Android 11+): on/off and brightness next to your other smart-home tiles, also from the lock screen
 - **Automations**: schedules, sunset/sunrise, and arriving home, all run on the phone
 - **Hooks** for launcher shortcuts, NFC tags, Tasker and MacroDroid
+- Opens instantly to the last state, syncs live while open, and heals the light's IP if it changes
+- In-app **QR scanner** for setup, **haptics**, theme + **Material You**, and it respects your "reduce animations" setting
 - Colour (hue + saturation), white (warmth), and brightness sliders
 - One-tap presets
 - Finds the light on your network automatically

@@ -238,33 +238,17 @@ private sealed interface UpdateUi {
     data object Idle : UpdateUi
     data object Checking : UpdateUi
     data object UpToDate : UpdateUi
-    data object Downloading : UpdateUi
     data class Available(val release: Updater.Release) : UpdateUi
     data class Error(val message: String) : UpdateUi
 }
 
-/** Check GitHub for a newer release and install it over the current app. */
+/** Check GitHub for a newer release; opens the download in the browser (no in-app installer). */
 @Composable
 private fun UpdatesCard() {
     val c = Arva.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var ui by remember { mutableStateOf<UpdateUi>(UpdateUi.Idle) }
-
-    fun startInstall(release: Updater.Release) {
-        if (!Updater.canInstall(context)) {
-            Toast.makeText(context, "Allow Shining to install apps, then tap Update again", Toast.LENGTH_LONG).show()
-            Updater.requestInstallPermission(context)
-            return
-        }
-        ui = UpdateUi.Downloading
-        scope.launch {
-            ui = runCatching {
-                Updater.install(context, Updater.download(context, release.apkUrl))
-                UpdateUi.Available(release) // keep showing until the system installer takes over
-            }.getOrElse { UpdateUi.Error("Download failed: ${it.message}") }
-        }
-    }
 
     SettingCard("Updates") {
         Text("You're on Shining ${BuildConfig.VERSION_NAME}.", style = MaterialTheme.typography.bodySmall, color = c.text2)
@@ -275,18 +259,19 @@ private fun UpdatesCard() {
                 if (st.release.notes.isNotBlank()) {
                     Text(st.release.notes, style = MaterialTheme.typography.bodySmall, color = c.text2, maxLines = 8, overflow = TextOverflow.Ellipsis)
                 }
-                PrimaryButton("Download & install", onClick = { startInstall(st.release) })
+                PrimaryButton("Get the update", onClick = { Updater.openDownload(context, st.release.downloadUrl) })
+                Text("Opens the download in your browser. Tap the APK to install it.", style = MaterialTheme.typography.bodySmall, color = c.text2)
             }
             UpdateUi.UpToDate -> Text("You're up to date.", style = MaterialTheme.typography.bodyMedium, color = c.success)
             is UpdateUi.Error -> Text(st.message, style = MaterialTheme.typography.bodySmall, color = c.error)
-            UpdateUi.Checking, UpdateUi.Downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            UpdateUi.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
-                Text(if (st == UpdateUi.Downloading) "Downloading…" else "Checking…", style = MaterialTheme.typography.bodyMedium, color = c.text2)
+                Text("Checking…", style = MaterialTheme.typography.bodyMedium, color = c.text2)
             }
             UpdateUi.Idle -> {}
         }
 
-        if (ui != UpdateUi.Checking && ui != UpdateUi.Downloading) {
+        if (ui != UpdateUi.Checking) {
             SecondaryButton("Check for updates", onClick = {
                 ui = UpdateUi.Checking
                 scope.launch {

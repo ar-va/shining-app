@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- The downloaded update APK lives in the app cache. -->
-    <cache-path name="updates" path="." />
-</paths>

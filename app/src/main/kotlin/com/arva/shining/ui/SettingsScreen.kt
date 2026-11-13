@@ -154,6 +154,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                     ArvaField(
                         s.obPassword, { v -> vm.edit { it.copy(obPassword = v) } }, "Web password",
                         supporting = "OpenBeken's login — leave blank if you didn't set one",
+                        password = true,
                     )
                 }
                 if (!s.isOpenBeken) {

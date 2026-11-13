@@ -43,6 +43,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -219,8 +225,11 @@ fun ArvaField(
     isError: Boolean = false,
     supporting: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
+    password: Boolean = false,
 ) {
     val c = Arva.colors
+    var reveal by remember { mutableStateOf(false) }
+    val masked = password && !reveal
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -229,10 +238,23 @@ fun ArvaField(
         singleLine = true,
         isError = isError,
         shape = RadiusControl,
-        textStyle = if (mono) MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.bodyMedium.fontSize)
+        textStyle = if (mono || masked) MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.bodyMedium.fontSize)
         else MaterialTheme.typography.bodyMedium,
         supportingText = supporting?.let { { Text(it, style = MaterialTheme.typography.bodySmall) } },
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
+        trailingIcon = if (password) {
+            {
+                IconButton(onClick = { reveal = !reveal }) {
+                    Icon(
+                        painterResource(if (reveal) R.drawable.ic_eye_off else R.drawable.ic_eye),
+                        contentDescription = if (reveal) "Hide password" else "Show password",
+                        tint = c.text2,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        } else null,
+        keyboardOptions = KeyboardOptions(keyboardType = if (password) KeyboardType.Password else keyboardType),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = c.surface, unfocusedContainerColor = c.surface, errorContainerColor = c.surface,
             focusedBorderColor = c.accent, unfocusedBorderColor = c.line, errorBorderColor = c.error,

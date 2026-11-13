@@ -143,7 +143,9 @@ fun BrightnessCapsule(
                     label = "breathe",
                 ).value
             } else 0.92f
-            Canvas(Modifier.fillMaxSize()) {
+            // matchParentSize (not fillMaxSize): fill the capsule-sized box WITHOUT growing it, so
+            // adding/removing the glow on toggle never shifts the capsule's position.
+            Canvas(Modifier.matchParentSize()) {
                 val centre = Offset(size.width / 2f, size.height / 2f)
                 val radius = size.height * 0.56f * breathe
                 // A soft, understated bloom — dim enough to read as ambient, not a spotlight.

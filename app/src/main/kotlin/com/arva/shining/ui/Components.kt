@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -58,10 +59,17 @@ val RadiusCard = RoundedCornerShape(12.dp)
 fun ArvaHeader(
     title: String,
     navigation: (@Composable () -> Unit)? = null,
+    // On scrolling screens the bar sits on its own surface with a divider; on the non-scrolling main
+    // screen it blends into the page (transparent, no line) so everything reads as one surface.
+    divider: Boolean = true,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val c = Arva.colors
-    Column(Modifier.background(c.bg).windowInsetsPadding(WindowInsets.statusBars)) {
+    Column(
+        Modifier
+            .background(if (divider) c.bg else Color.Transparent)
+            .windowInsetsPadding(WindowInsets.statusBars),
+    ) {
         Row(
             Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -77,7 +85,7 @@ fun ArvaHeader(
             Text(title, style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.weight(1f))
             actions()
         }
-        HorizontalDivider(thickness = 1.dp, color = c.line)
+        if (divider) HorizontalDivider(thickness = 1.dp, color = c.line)
     }
 }
 

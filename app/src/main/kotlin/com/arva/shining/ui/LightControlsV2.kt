@@ -1,9 +1,18 @@
 package com.arva.shining.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import com.arva.shining.lightApp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -79,9 +88,16 @@ import kotlin.math.sin
  * 1% give a light haptic. The colour is content (the brand's deliberate exception); chrome is on-brand.
  */
 @Composable
-fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) -> Unit, modifier: Modifier = Modifier) {
+fun BrightnessCapsule(
+    s: UiState,
+    onToggle: () -> Unit,
+    onBrightness: (Float) -> Unit,
+    onLongPress: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val c = Arva.colors
     val view = LocalView.current
+    val glowOn by LocalContext.current.lightApp.themeStore.glow.collectAsState()
     val base = lightColourOf(s)
     val fill = if (s.on) base else c.sunken
     val track = if (s.on) lerp(base, c.bg, 0.86f) else c.sunken
@@ -116,6 +132,30 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
     }
 
     Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        // Ambient glow (opt-in): a soft bloom of the light's colour behind the capsule, gently
+        // breathing. Deliberately against the brand's calm/no-decoration rule — it's a setting.
+        if (glowOn && s.on) {
+            val breathe = if (animationsOn()) {
+                val t = rememberInfiniteTransition(label = "glow")
+                t.animateFloat(
+                    0.85f, 1f,
+                    infiniteRepeatable(tween(2800, easing = LinearEasing), RepeatMode.Reverse),
+                    label = "breathe",
+                ).value
+            } else 0.92f
+            Canvas(Modifier.fillMaxSize()) {
+                val centre = Offset(size.width / 2f, size.height / 2f)
+                val radius = size.height * 0.56f * breathe
+                // A soft, understated bloom — dim enough to read as ambient, not a spotlight.
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(base.copy(alpha = 0.16f * breathe), Color.Transparent),
+                        center = centre, radius = radius,
+                    ),
+                    radius = radius, center = centre,
+                )
+            }
+        }
         // The capsule itself, centred.
         Box(
             Modifier
@@ -132,7 +172,7 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
                         onDragCancel = { dragging = false },
                     ) { change, _ -> change.consume(); setFromY(change.position.y) }
                 }
-                .pointerInput(Unit) { detectTapGestures { onToggle() } }
+                .pointerInput(Unit) { detectTapGestures(onLongPress = { onLongPress() }, onTap = { onToggle() }) }
                 .semantics {
                     contentDescription = "Light"
                     stateDescription = if (s.on) "On, $pct%" else "Off"

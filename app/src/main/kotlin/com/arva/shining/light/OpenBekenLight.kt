@@ -39,7 +39,15 @@ class OpenBekenLight(
         return DriverReading(state = state, schema = null, detail = mapOf("state" to json))
     }
 
+    // Enable smooth hardware fades once per connection, so colour/brightness changes ease
+    // instead of snapping. OpenBeken keeps this until reboot; we re-assert on each new driver.
+    @Volatile private var fadeReady = false
+
     override fun apply(command: LightCommand, current: LightState?) {
+        if (!fadeReady) {
+            request("Fade 1"); request("Speed 3")
+            fadeReady = true
+        }
         // One request per console command; OpenBeken applies them in order.
         for (cmnd in OpenBekenProtocol.commandsFor(command, current)) request(cmnd)
     }

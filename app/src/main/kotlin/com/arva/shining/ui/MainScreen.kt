@@ -39,6 +39,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -81,26 +82,80 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
         }
     }
 
-    Column(Modifier.fillMaxSize().background(c.bg)) {
-        ArvaHeader("Shining") {
-            if (s.configured) {
-                HeaderIcon(R.drawable.ic_refresh, "Refresh", vm::refresh)
-                HeaderIcon(R.drawable.ic_clock, "Automations", onOpenAutomations)
+    // Opt-in colour wash: a faint bloom of the light's colour behind the whole screen (off by default).
+    val washOn by LocalContext.current.lightApp.themeStore.wash.collectAsState()
+    // Transient "Turned off · Undo" bar after switching the light off from the capsule.
+    var undoShow by remember { mutableStateOf(false) }
+    LaunchedEffect(undoShow) { if (undoShow) { delay(4_000); undoShow = false } }
+
+    Box(Modifier.fillMaxSize().background(c.bg)) {
+        if (washOn && s.on && s.configured) ColourWash(lightColourOf(s))
+        Column(Modifier.fillMaxSize()) {
+            ArvaHeader("Shining", divider = false) {
+                if (s.configured) {
+                    HeaderIcon(R.drawable.ic_refresh, "Refresh", vm::refresh)
+                    HeaderIcon(R.drawable.ic_clock, "Automations", onOpenAutomations)
+                }
+                HeaderIcon(R.drawable.ic_settings, "Light setup", onOpenSettings)
             }
-            HeaderIcon(R.drawable.ic_settings, "Light setup", onOpenSettings)
+            Box(Modifier.fillMaxWidth().height(2.dp)) {
+                if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent, trackColor = c.bg)
+            }
+            updateVersion?.takeIf { !updateDismissed }?.let { v -> UpdateBanner(v, onOpenSettings) { updateDismissed = true } }
+            if (!s.configured) {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                ) { SetupPrompt(onOpenSettings) }
+            } else {
+                Controls(s, vm, onPoweredOff = { undoShow = true })
+            }
         }
-        Box(Modifier.fillMaxWidth().height(2.dp)) {
-            if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent, trackColor = c.bg)
+        if (undoShow) {
+            UndoBar(
+                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp),
+                onUndo = { vm.togglePower(); undoShow = false },
+            )
         }
-        updateVersion?.takeIf { !updateDismissed }?.let { v -> UpdateBanner(v, onOpenSettings) { updateDismissed = true } }
-        if (!s.configured) {
-            Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-            ) { SetupPrompt(onOpenSettings) }
-        } else {
-            Controls(s, vm)
-        }
+    }
+}
+
+/** A faint radial of the light's colour behind the screen (the opt-in colour wash). */
+@Composable
+private fun ColourWash(colour: Color) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val centre = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height * 0.34f)
+        val radius = size.minDimension * 0.95f
+        drawCircle(
+            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                colors = listOf(colour.copy(alpha = 0.12f), Color.Transparent),
+                center = centre, radius = radius,
+            ),
+            radius = radius, center = centre,
+        )
+    }
+}
+
+/** Transient bottom bar with an Undo action, shown after turning the light off. */
+@Composable
+private fun UndoBar(modifier: Modifier, onUndo: () -> Unit) {
+    val c = Arva.colors
+    Row(
+        modifier
+            .clip(RadiusTag)
+            .background(c.surface)
+            .border(1.dp, c.line, RadiusTag)
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Turned off", style = MaterialTheme.typography.bodyMedium, color = c.text)
+        Text(
+            "Undo",
+            style = MaterialTheme.typography.labelLarge,
+            color = c.accent,
+            modifier = Modifier.clip(RadiusControl).clickable(onClickLabel = "Undo", onClick = onUndo).padding(horizontal = 10.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -139,11 +194,15 @@ private fun SetupPrompt(onOpenSettings: () -> Unit) {
 }
 
 @Composable
-private fun ColumnScope.Controls(s: UiState, vm: MainViewModel) {
+private fun ColumnScope.Controls(s: UiState, vm: MainViewModel, onPoweredOff: () -> Unit) {
     val c = Arva.colors
     val view = LocalView.current
     // Tapping the capsule turns the light on/off (no separate button), with a stronger toggle haptic.
-    val toggle = { view.hapticToggle(!s.on); vm.togglePower() }
+    val toggle = {
+        val goingOff = s.on
+        view.hapticToggle(!s.on); vm.togglePower()
+        if (goingOff) onPoweredOff()
+    }
     var picking by remember { mutableStateOf(false) }
 
     // Everything fits on one screen (no page scroll). Name + status at the top, the capsule fills the
@@ -153,12 +212,16 @@ private fun ColumnScope.Controls(s: UiState, vm: MainViewModel) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(s.name, style = MaterialTheme.typography.headlineMedium, color = c.text, modifier = Modifier.weight(1f))
-            StatusChip(s)
+            StatusChip(s, onRetry = vm::refresh)
         }
     }
 
     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-        BrightnessCapsule(s, onToggle = toggle, onBrightness = vm::setBrightness)
+        BrightnessCapsule(
+            s, onToggle = toggle, onBrightness = vm::setBrightness,
+            // Long-press the capsule for instant full brightness.
+            onLongPress = { view.hapticTick(); vm.setBrightness(1f) },
+        )
     }
 
     Column(
@@ -168,6 +231,7 @@ private fun ColumnScope.Controls(s: UiState, vm: MainViewModel) {
         BrightnessStepper(s, onBrightness = vm::setBrightness)
     }
 
+    RecentsRow(vm)
     PresetsRow(s, vm, onOpenPicker = { view.hapticSelect(); picking = true })
 
     if (picking) {
@@ -176,8 +240,34 @@ private fun ColumnScope.Controls(s: UiState, vm: MainViewModel) {
             onColourMode = vm::setColourMode,
             onHsv = vm::setHsv,
             onTemperature = vm::setTemperature,
-            onDismiss = { picking = false },
+            onDismiss = { vm.rememberCurrentColour(); picking = false },
         )
+    }
+}
+
+/** Small row of recently picked colours (session-scoped) for a quick snap-back. Hidden when empty. */
+@Composable
+private fun RecentsRow(vm: MainViewModel) {
+    val recent by vm.recent.collectAsStateWithLifecycle()
+    if (recent.isEmpty()) return
+    val c = Arva.colors
+    val view = LocalView.current
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(top = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GroupLabel("Recent", Modifier.padding(end = 4.dp))
+        recent.forEach { hsv ->
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.hsv(hsv.h, hsv.s, 1f))
+                    .border(1.dp, c.line, CircleShape)
+                    .clickable(onClickLabel = "Use recent colour") { view.hapticSelect(); vm.setHsv(hsv.h, hsv.s) },
+            )
+        }
     }
 }
 
@@ -241,17 +331,22 @@ private fun PresetsRow(s: UiState, vm: MainViewModel, onOpenPicker: () -> Unit) 
 
 private val DotSize = 60.dp
 
-/** Small pill shown only when there's something to say (updating / offline). */
+/** Small pill shown only when there's something to say (updating / offline). Tap when offline to retry. */
 @Composable
-private fun StatusChip(s: UiState) {
+private fun StatusChip(s: UiState, onRetry: () -> Unit) {
     val c = Arva.colors
+    val offline = s.error != null || !s.connected
     val (dot, label) = when {
         s.loading -> c.accent to "Updating"
-        s.error != null || !s.connected -> c.error to "Offline"
+        offline -> c.error to "Offline · retry"
         else -> return
     }
     Row(
-        Modifier.clip(RadiusTag).background(c.sunken).padding(horizontal = 10.dp, vertical = 6.dp),
+        Modifier
+            .clip(RadiusTag)
+            .background(c.sunken)
+            .then(if (offline && !s.loading) Modifier.clickable(onClickLabel = "Retry connection", onClick = onRetry) else Modifier)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {

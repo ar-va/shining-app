@@ -202,6 +202,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
             }
 
             AppearanceCard()
+            AmbientCard()
             UpdatesCard()
             PresetsCard()
             AboutFooter()
@@ -314,6 +315,33 @@ private fun PresetsCard() {
             context.lightApp.presetStore.resetToDefault()
             Toast.makeText(context, "Presets reset", Toast.LENGTH_SHORT).show()
         })
+    }
+}
+
+/** Opt-in ambient effects (glow + colour wash). Off by default; they bend the brand's calm rule. */
+@Composable
+private fun AmbientCard() {
+    val c = Arva.colors
+    val store = LocalContext.current.lightApp.themeStore
+    val glow by store.glow.collectAsState()
+    val wash by store.wash.collectAsState()
+    SettingCard("Ambient") {
+        Text("Let the app glow in the light's colour. Off by default — it's a bit extra.", style = MaterialTheme.typography.bodySmall, color = c.text2)
+        ToggleRow("Capsule glow", "A soft bloom behind the light, gently breathing.", glow, store::setGlow)
+        ToggleRow("Colour wash", "Tint the whole screen with the current colour.", wash, store::setWash)
+    }
+}
+
+/** A titled switch row used in the settings cards. */
+@Composable
+private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val c = Arva.colors
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = c.text)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = c.text2)
+        }
+        ArvaSwitch(checked, title, onChange)
     }
 }
 

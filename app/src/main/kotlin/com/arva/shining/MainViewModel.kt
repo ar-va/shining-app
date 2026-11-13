@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.arva.tuya.DeviceConfig
+import com.arva.tuya.Hsv
 import com.arva.tuya.LightKind
 import com.arva.tuya.LightMode
 import kotlinx.coroutines.channels.Channel
@@ -34,6 +35,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<UiState> = _state
+
+    // Recently picked colours (session-scoped), newest first, for a quick "snap back" row.
+    private val _recent = MutableStateFlow<List<Hsv>>(emptyList())
+    val recent: StateFlow<List<Hsv>> = _recent
 
     // Slider drags produce many changes a few ms apart. Keep only the latest desired command and
     // send it at most every ~100 ms, so the light isn't flooded.
@@ -174,6 +179,22 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setBrightness(b: Float) {
         _state.update { it.copy(brightness = b.coerceAtLeast(0.01f), on = true) }
         sendCurrentMode()
+    }
+
+    /** Nudge brightness by a whole-percent delta (e.g. hardware volume keys). */
+    fun bumpBrightness(deltaPct: Int) {
+        val pct = (_state.value.brightness * 100).roundToInt()
+        setBrightness(((pct + deltaPct).coerceIn(1, 100)) / 100f)
+    }
+
+    /** Remember the current colour (called when the picker closes) so it appears in the recents row. */
+    fun rememberCurrentColour() {
+        val s = _state.value
+        if (!s.colourMode) return
+        val c = Hsv(s.hue, s.saturation, 1f)
+        _recent.update { prev ->
+            (listOf(c) + prev.filterNot { kotlin.math.abs(it.h - c.h) < 4f && kotlin.math.abs(it.s - c.s) < 0.04f }).take(8)
+        }
     }
 
 

@@ -22,6 +22,13 @@ class ThemeStore(context: Context) {
     private val _dynamic = MutableStateFlow(prefs.getBoolean("dynamic", false))
     val dynamic: StateFlow<Boolean> = _dynamic
 
+    // Opt-in ambient effects (deliberately off by default; they bend the brand's calm/no-decoration rules).
+    private val _glow = MutableStateFlow(prefs.getBoolean("glow", false))
+    val glow: StateFlow<Boolean> = _glow
+
+    private val _wash = MutableStateFlow(prefs.getBoolean("wash", false))
+    val wash: StateFlow<Boolean> = _wash
+
     fun setMode(mode: ThemeMode) {
         prefs.edit { putString("mode", mode.name) }
         _mode.value = mode
@@ -30,5 +37,15 @@ class ThemeStore(context: Context) {
     fun setDynamic(on: Boolean) {
         prefs.edit { putBoolean("dynamic", on) }
         _dynamic.value = on
+    }
+
+    fun setGlow(on: Boolean) {
+        prefs.edit { putBoolean("glow", on) }
+        _glow.value = on
+    }
+
+    fun setWash(on: Boolean) {
+        prefs.edit { putBoolean("wash", on) }
+        _wash.value = on
     }
 }

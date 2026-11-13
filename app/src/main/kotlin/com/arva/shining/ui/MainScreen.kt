@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -130,10 +129,7 @@ private fun ColumnScope.Controls(s: UiState, vm: MainViewModel) {
     }
 
     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-        BrightnessCapsule(
-            s, onToggle = toggle, onBrightness = vm::setBrightness,
-            modifier = Modifier.fillMaxHeight().padding(vertical = 12.dp),
-        )
+        BrightnessCapsule(s, onToggle = toggle, onBrightness = vm::setBrightness)
     }
 
     Column(

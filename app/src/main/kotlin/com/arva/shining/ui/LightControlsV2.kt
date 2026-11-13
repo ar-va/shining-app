@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -119,7 +120,7 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
         Box(
             Modifier
                 .width(CapsuleWidth)
-                .fillMaxHeight()
+                .height(CapsuleHeight)
                 .clip(shape)
                 .background(track)
                 .border(1.dp, c.line, shape)
@@ -189,9 +190,11 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
     }
 }
 
-private val CapsuleWidth = 132.dp
-private val OnRadius = 66.dp
-private val OffRadius = 30.dp
+// Google-Home-ish proportions: a wide, comfortably tall pill (not a thin bar), centred with margins.
+private val CapsuleWidth = 184.dp
+private val CapsuleHeight = 400.dp
+private val OnRadius = 92.dp
+private val OffRadius = 36.dp
 
 /**
  * Brightness read-out and fine control: the percentage (tap to type an exact value) flanked by − / +

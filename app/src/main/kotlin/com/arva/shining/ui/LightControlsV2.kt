@@ -273,6 +273,35 @@ fun BrightnessStepper(s: UiState, onBrightness: (Float) -> Unit) {
     }
 }
 
+/** Quick brightness levels: Off, 25, 50, 75, 100. The current level is highlighted. */
+@Composable
+fun BrightnessLevels(s: UiState, onLevel: (Int) -> Unit) {
+    val c = Arva.colors
+    val view = LocalView.current
+    val current = if (s.on) (s.brightness * 100).roundToInt() else 0
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (level in listOf(0, 25, 50, 75, 100)) {
+            val active = if (level == 0) !s.on else s.on && kotlin.math.abs(current - level) <= 3
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RadiusControl)
+                    .background(if (active) c.accentTint else c.sunken)
+                    .border(1.dp, if (active) c.accent else c.line, RadiusControl)
+                    .clickable(onClickLabel = if (level == 0) "Turn off" else "Set $level percent") { view.hapticSelect(); onLevel(level) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (level == 0) "Off" else "$level",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (active) c.accent else c.text2,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun StepButton(sign: String, enabled: Boolean, onClick: () -> Unit) {
     val c = Arva.colors

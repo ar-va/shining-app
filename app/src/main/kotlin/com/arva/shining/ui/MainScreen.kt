@@ -229,6 +229,13 @@ private fun ColumnScope.Controls(s: UiState, vm: MainViewModel, onPoweredOff: ()
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         BrightnessStepper(s, onBrightness = vm::setBrightness)
+        BrightnessLevels(s) { level ->
+            if (level == 0) {
+                if (s.on) { view.hapticToggle(false); vm.togglePower(); onPoweredOff() }
+            } else {
+                view.hapticSelect(); vm.setBrightness(level / 100f)
+            }
+        }
     }
 
     RecentsRow(vm)

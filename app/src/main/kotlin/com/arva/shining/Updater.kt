@@ -24,6 +24,7 @@ import java.net.URL
 object Updater {
     private const val REPO = "ar-va/shining-app"
     private const val UA = "Shining-Updater" // generic client name; never any user/personal info
+    private const val MAX_APK_BYTES = 64L * 1024 * 1024 // sanity cap; the real APK is ~3 MB
     private val json = Json { ignoreUnknownKeys = true }
 
     data class Release(val version: String, val notes: String, val apkUrl: String)
@@ -67,9 +68,10 @@ object Updater {
         return false
     }
 
-    /** Downloads the APK to the app cache, returning the file. */
+    /** Downloads the APK to the app cache, returning the file. Clears any stale/partial file first. */
     suspend fun download(context: Context, url: String): File = withContext(Dispatchers.IO) {
         val file = File(context.cacheDir, "update.apk")
+        file.delete() // never install over a leftover/partial download
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000; readTimeout = 60_000
             instanceFollowRedirects = true
@@ -77,7 +79,23 @@ object Updater {
         }
         try {
             if (conn.responseCode !in 200..299) throw java.io.IOException("HTTP ${conn.responseCode}")
-            conn.inputStream.use { input -> file.outputStream().use { input.copyTo(it) } }
+            if (conn.contentLengthLong > MAX_APK_BYTES) throw java.io.IOException("Update is unexpectedly large")
+            var total = 0L
+            conn.inputStream.use { input ->
+                file.outputStream().use { out ->
+                    val buf = ByteArray(16 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        total += n
+                        if (total > MAX_APK_BYTES) throw java.io.IOException("Update is unexpectedly large")
+                        out.write(buf, 0, n)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            file.delete() // don't leave a partial APK behind for the installer
+            throw e
         } finally {
             conn.disconnect()
         }

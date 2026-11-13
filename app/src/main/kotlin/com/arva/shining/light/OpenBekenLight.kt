@@ -39,14 +39,13 @@ class OpenBekenLight(
         return DriverReading(state = state, schema = null, detail = mapOf("state" to json))
     }
 
-    // Enable smooth hardware fades once per connection, so colour/brightness changes ease
-    // instead of snapping. OpenBeken keeps this until reboot; we re-assert on each new driver.
-    @Volatile private var fadeReady = false
-
     override fun apply(command: LightCommand, current: LightState?) {
-        if (!fadeReady) {
-            request("Fade 1"); request("Speed 3")
-            fadeReady = true
+        // Enable smooth hardware fades once per light per process (not on every 20 s reconnect), so
+        // colour/brightness changes ease instead of snapping. OpenBeken keeps this until it reboots.
+        val key = "$host:$port"
+        if (fadeConfigured.add(key)) {
+            runCatching { request("Fade 1"); request("Speed 3") }
+                .onFailure { fadeConfigured.remove(key); throw it } // retry next time if it failed
         }
         // One request per console command; OpenBeken applies them in order.
         for (cmnd in OpenBekenProtocol.commandsFor(command, current)) request(cmnd)
@@ -55,6 +54,9 @@ class OpenBekenLight(
     override fun close() {}
 
     companion object {
+        // Lights (by host:port) that have had fades enabled this process, so we send it only once.
+        private val fadeConfigured = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
         /** Builds a driver from an address that may include a port, e.g. "192.168.1.50" or "10.0.2.2:8080". */
         fun fromAddress(address: String, network: Network? = null, username: String = "admin", password: String = ""): OpenBekenLight {
             val trimmed = address.trim()

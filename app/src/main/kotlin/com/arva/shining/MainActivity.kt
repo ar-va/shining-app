@@ -2,7 +2,6 @@ package com.arva.shining
 
 import android.content.Intent
 import android.os.Bundle
-import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -76,29 +75,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleSetupLink(intent)
-    }
-
-    // While the light is on, the volume keys nudge its brightness. When it's off (or not set up),
-    // they fall through to the normal phone volume so nothing feels hijacked.
-    private fun handleVolumeKey(keyCode: Int): Boolean {
-        val s = main.state.value
-        if (!s.configured || !s.on) return false
-        when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP -> main.bumpBrightness(5)
-            KeyEvent.KEYCODE_VOLUME_DOWN -> main.bumpBrightness(-5)
-            else -> return false
-        }
-        return true
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
-        handleVolumeKey(keyCode) || super.onKeyDown(keyCode, event)
-
-    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        // Consume the matching key-up so the system volume panel doesn't appear.
-        val s = main.state.value
-        if ((keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) && s.configured && s.on) return true
-        return super.onKeyUp(keyCode, event)
     }
 
     override fun onResume() {

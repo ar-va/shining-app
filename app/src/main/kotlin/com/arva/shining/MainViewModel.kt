@@ -181,12 +181,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         sendCurrentMode()
     }
 
-    /** Nudge brightness by a whole-percent delta (e.g. hardware volume keys). */
-    fun bumpBrightness(deltaPct: Int) {
-        val pct = (_state.value.brightness * 100).roundToInt()
-        setBrightness(((pct + deltaPct).coerceIn(1, 100)) / 100f)
-    }
-
     /** Remember the current colour (called when the picker closes) so it appears in the recents row. */
     fun rememberCurrentColour() {
         val s = _state.value

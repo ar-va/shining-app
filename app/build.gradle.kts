@@ -29,8 +29,8 @@ android {
         applicationId = "com.arva.shining"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.13.2"
+        versionCode = 18
+        versionName = "1.13.3"
     }
 
     buildTypes {

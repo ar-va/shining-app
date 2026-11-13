@@ -77,11 +77,16 @@ object OpenBekenProtocol {
 
         val hue = hsb?.getOrNull(0) ?: 0f
         val sat = (hsb?.getOrNull(1) ?: 0f) / 100f
-        val brightness = ((dimmer ?: hsb?.getOrNull(2)?.roundToInt() ?: 100) / 100f).coerceIn(0f, 1f)
 
         // White when there's no colour saturation; otherwise colour. Like Tuya, leave colour null
         // in white mode so the UI keeps its last hue/saturation instead of snapping to grey.
         val white = sat <= 0f
+        // Brightness source depends on mode: in colour mode Shining sets it via HSBColor's value, and
+        // the master `Dimmer` can stay at 100 — reading Dimmer there made the UI snap back to full.
+        // In white/CT mode brightness is the `Dimmer` Shining sends alongside `CT`.
+        val hsbBri = hsb?.getOrNull(2)?.roundToInt()
+        val brightnessPct = (if (white) (dimmer ?: hsbBri) else (hsbBri ?: dimmer)) ?: 100
+        val brightness = (brightnessPct / 100f).coerceIn(0f, 1f)
         return LightState(
             on = on,
             mode = if (white) LightMode.WHITE else LightMode.COLOUR,

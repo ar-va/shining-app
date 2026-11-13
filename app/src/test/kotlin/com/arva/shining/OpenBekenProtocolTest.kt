@@ -84,7 +84,15 @@ class OpenBekenProtocolTest {
         assertEquals(LightMode.COLOUR, s.mode)
         assertEquals(35f, s.colour!!.h, 0.5f)
         assertEquals(0.82f, s.colour!!.s, 0.01f)
-        assertEquals(1f, s.brightness, 0.01f)
+        // In colour mode brightness comes from HSBColor's value (62), NOT the master Dimmer (100).
+        assertEquals(0.62f, s.brightness, 0.01f)
+    }
+
+    @Test fun `colour brightness ignores a master Dimmer stuck at 100`() {
+        // Real OpenBeken: set HSBColor to 50% but master Dimmer stays 100 — UI must read 50, not 100.
+        val s = OpenBekenProtocol.parseState("""{"POWER":"ON","Dimmer":100,"HSBColor":"0,100,50"}""")!!
+        assertEquals(LightMode.COLOUR, s.mode)
+        assertEquals(0.5f, s.brightness, 0.01f)
     }
 
     @Test fun `parse rejects non-openbeken json`() {

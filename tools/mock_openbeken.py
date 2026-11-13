@@ -18,7 +18,8 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-state = {"on": False, "dimmer": 60, "white": True, "hue": 30, "sat": 0, "ct": 370}
+state = {"on": False, "dimmer": 100, "white": True, "hue": 30, "sat": 0, "ct": 370, "vbri": 60}
+# Real OpenBeken keeps the master "dimmer" separate from the colour value ("vbri" = HSBColor V).
 AUTH = None  # when set to "user:pass", /cm requires HTTP Basic auth (like real OpenBeken)
 
 
@@ -36,7 +37,7 @@ def handle_command(cmnd: str):
             state["on"] = True
     elif name == "hsbcolor":
         h, s, b = (arg.split(",") + ["", "", ""])[:3]
-        state.update(white=False, hue=int(h or 0), sat=int(s or 100), dimmer=int(b or state["dimmer"]), on=True)
+        state.update(white=False, hue=int(h or 0), sat=int(s or 100), vbri=int(b or state["vbri"]), on=True)  # colour value, NOT master dimmer
     elif name == "ct":
         state.update(white=True, sat=0, ct=int(arg or state["ct"]), on=True)
     return None
@@ -47,7 +48,7 @@ def report():
     return {
         "POWER": "ON" if s["on"] else "OFF",
         "Dimmer": s["dimmer"],
-        "HSBColor": f"{s['hue']},{0 if s['white'] else s['sat']},{s['dimmer']}",
+        "HSBColor": f"{s['hue']},{0 if s['white'] else s['sat']},{s['vbri']}",
         "CT": s["ct"],
     }
 

@@ -1,6 +1,8 @@
 package com.arva.shining.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,10 +19,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -71,9 +71,11 @@ import kotlin.math.sin
 
 /**
  * The light's hero: a tall vertical capsule that fills from the bottom with the light's real colour,
- * its height showing brightness. Drag up/down to set brightness by position; tap to toggle. A small
- * percentage bubble fades in beside the fill while adjusting. First touch and every 1% give haptic
- * feedback. The colour is content (the brand's deliberate exception); the chrome stays on-brand.
+ * its height showing brightness. Tap anywhere on it to turn the light on or off (no separate button);
+ * drag up/down to set brightness by position. When off it relaxes to a soft rectangle and when on it
+ * rounds into a pill — the shape and fill animate on toggle, with a stronger haptic than a brightness
+ * step. A small percentage bubble fades in beside the fill while adjusting; the first touch and every
+ * 1% give a light haptic. The colour is content (the brand's deliberate exception); chrome is on-brand.
  */
 @Composable
 fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) -> Unit, modifier: Modifier = Modifier) {
@@ -83,13 +85,27 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
     val fill = if (s.on) base else c.sunken
     val track = if (s.on) lerp(base, c.bg, 0.86f) else c.sunken
     val onFill = if (s.on) onColourOf(base) else c.text2
-    val fraction = if (s.on) s.brightness.coerceIn(0.05f, 1f) else 0f
+    val targetFraction = if (s.on) s.brightness.coerceIn(0.05f, 1f) else 0f
     val pct = (s.brightness * 100).roundToInt().coerceIn(0, 100)
 
     var heightPx by remember { mutableFloatStateOf(1f) }
     var dragging by remember { mutableStateOf(false) }
     var lastPct by remember { mutableIntStateOf(pct) }
     val density = LocalDensity.current
+
+    // Fill follows the finger exactly while dragging (no lag); it eases when toggling on/off.
+    val fraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = tween(if (dragging) 0 else motionMs(300)),
+        label = "fill",
+    )
+    // Rectangular when off, a full pill when on — morphs on toggle.
+    val corner by animateDpAsState(
+        targetValue = if (s.on) OnRadius else OffRadius,
+        animationSpec = tween(motionMs(300)),
+        label = "corner",
+    )
+    val shape = RoundedCornerShape(corner)
 
     fun setFromY(y: Float) {
         val f = (1f - y / heightPx).coerceIn(0f, 1f)
@@ -98,15 +114,15 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
         onBrightness(f)
     }
 
-    Box(modifier.fillMaxWidth().height(CapsuleHeight), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
         // The capsule itself, centred.
         Box(
             Modifier
                 .width(CapsuleWidth)
                 .fillMaxHeight()
-                .clip(CapsuleShape)
+                .clip(shape)
                 .background(track)
-                .border(1.dp, c.line, CapsuleShape)
+                .border(1.dp, c.line, shape)
                 .onSizeChanged { heightPx = it.height.toFloat().coerceAtLeast(1f) }
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
@@ -117,7 +133,7 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
                 }
                 .pointerInput(Unit) { detectTapGestures { onToggle() } }
                 .semantics {
-                    contentDescription = "Brightness"
+                    contentDescription = "Light"
                     stateDescription = if (s.on) "On, $pct%" else "Off"
                     progressBarRangeInfo = ProgressBarRangeInfo(s.brightness, 0f..1f)
                     setProgress { onBrightness(it.coerceIn(0f, 1f)); true }
@@ -138,7 +154,7 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
                 painterResource(R.drawable.ic_brightness),
                 contentDescription = null,
                 tint = onFill,
-                modifier = Modifier.padding(bottom = 16.dp).size(22.dp),
+                modifier = Modifier.padding(bottom = 20.dp).size(22.dp),
             )
         }
 
@@ -173,9 +189,9 @@ fun BrightnessCapsule(s: UiState, onToggle: () -> Unit, onBrightness: (Float) ->
     }
 }
 
-private val CapsuleWidth = 128.dp
-private val CapsuleHeight = 264.dp
-private val CapsuleShape = RoundedCornerShape(64.dp)
+private val CapsuleWidth = 132.dp
+private val OnRadius = 66.dp
+private val OffRadius = 30.dp
 
 /**
  * Brightness read-out and fine control: the percentage (tap to type an exact value) flanked by − / +
@@ -249,6 +265,39 @@ private fun BrightnessTypeDialog(current: Int, onDismiss: () -> Unit, onSet: (In
         },
         confirmButton = { TextButton(onClick = { commit() }) { Text("Set", color = c.accent) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.text2) } },
+    )
+}
+
+/**
+ * The colour / temperature picker, shown as a dialog from the palette tile (Google-Home style): a
+ * Colour / Temperature switch over the 2-D wheel or the warmth gradient. Changes apply live to the
+ * light; "Done" closes it.
+ */
+@Composable
+fun ColourPickerDialog(
+    s: UiState,
+    onColourMode: (Boolean) -> Unit,
+    onHsv: (Float, Float) -> Unit,
+    onTemperature: (Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val c = Arva.colors
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.surface,
+        shape = RadiusCard,
+        title = { Text("Colour", style = MaterialTheme.typography.titleLarge, color = c.text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Segmented(listOf(true to "Colour", false to "Temperature"), s.colourMode, onColourMode)
+                if (s.colourMode) {
+                    ColourWheel(s.hue, s.saturation, onHsv)
+                } else {
+                    ColorSlider("Temperature", s.temperature, warmthName(s.temperature), onTemperature, WarmthTrack)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done", color = c.accent) } },
     )
 }
 

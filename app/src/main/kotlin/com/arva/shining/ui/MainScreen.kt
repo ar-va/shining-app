@@ -24,7 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,7 +33,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arva.shining.MainViewModel
@@ -111,51 +114,55 @@ private fun SetupPrompt(onOpenSettings: () -> Unit) {
 private fun ColumnScope.Controls(s: UiState, vm: MainViewModel) {
     val c = Arva.colors
     val view = LocalView.current
-    val toggle = { view.hapticTick(); vm.togglePower() }
+    // Tapping the capsule turns the light on/off (no separate button), with a stronger toggle haptic.
+    val toggle = { view.hapticToggle(!s.on); vm.togglePower() }
+    var picking by remember { mutableStateOf(false) }
 
-    // Fixed header: name + status, then the brightness capsule (vertical drag lives here, outside the
-    // scroll below, so dragging it never fights the page scroll).
+    // Everything fits on one screen (no page scroll). Name + status at the top, the capsule fills the
+    // flexible middle, then the brightness read-out and a horizontally scrolling preset row.
     Column(
-        Modifier.padding(horizontal = 20.dp).padding(top = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(s.name, style = MaterialTheme.typography.headlineMedium, color = c.text, modifier = Modifier.weight(1f))
             StatusChip(s)
         }
-        BrightnessCapsule(s, onToggle = toggle, onBrightness = vm::setBrightness)
     }
 
-    // Scrollable controls.
+    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+        BrightnessCapsule(
+            s, onToggle = toggle, onBrightness = vm::setBrightness,
+            modifier = Modifier.fillMaxHeight().padding(vertical = 12.dp),
+        )
+    }
+
     Column(
-        Modifier
-            .weight(1f)
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp)
-            .padding(top = 16.dp, bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         BrightnessStepper(s, onBrightness = vm::setBrightness)
-        PrimaryButton(if (s.on) "Turn off" else "Turn on", toggle, Modifier.fillMaxWidth())
+    }
 
-        ArvaCard {
-            Segmented(listOf(true to "Colour", false to "Temperature"), s.colourMode, vm::setColourMode)
-            if (s.colourMode) {
-                ColourWheel(s.hue, s.saturation, vm::setHsv)
-            } else {
-                ColorSlider("Temperature", s.temperature, warmthName(s.temperature), vm::setTemperature, WarmthTrack)
-            }
-        }
+    PresetsRow(s, vm, onOpenPicker = { view.hapticSelect(); picking = true })
 
-        PresetsSection(s, vm)
+    if (picking) {
+        ColourPickerDialog(
+            s,
+            onColourMode = vm::setColourMode,
+            onHsv = vm::setHsv,
+            onTemperature = vm::setTemperature,
+            onDismiss = { picking = false },
+        )
     }
 }
 
-/** Editable presets grid: tap to apply, long-press to remove, "+" to save the current colour. */
+/**
+ * A single horizontally scrolling row of round swatches (Google-Home style): the colour/temperature
+ * picker first, then the presets, then a "+" to save the current colour. Tap a preset to apply it,
+ * long-press to remove it. The row sits at the bottom, above the navigation bar.
+ */
 @Composable
-private fun PresetsSection(s: UiState, vm: MainViewModel) {
+private fun PresetsRow(s: UiState, vm: MainViewModel, onOpenPicker: () -> Unit) {
     val context = LocalContext.current
     val store = context.lightApp.presetStore
     val presets by store.items.collectAsStateWithLifecycle()
@@ -163,30 +170,25 @@ private fun PresetsSection(s: UiState, vm: MainViewModel) {
     var removing by remember { mutableStateOf<Int?>(null) }
     var adding by remember { mutableStateOf(false) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            GroupLabel("Presets", Modifier.weight(1f))
-            Text("Long-press to remove", style = MaterialTheme.typography.bodySmall, color = Arva.colors.text2)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .padding(top = 20.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PickerDot(onClick = onOpenPicker)
+        presets.forEachIndexed { idx, p ->
+            PresetDot(
+                p,
+                onClick = { view.hapticSelect(); vm.applyPreset(p) },
+                onLongClick = { view.hapticTick(); removing = idx },
+            )
         }
-        // The preset tiles followed by an "add" tile, laid out 5 per row.
-        val slots = presets.indices.toList() + ADD_TILE
-        slots.chunked(5).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { idx ->
-                    if (idx == ADD_TILE) {
-                        AddPresetTile(Modifier.weight(1f)) { view.hapticSelect(); adding = true }
-                    } else {
-                        val p = presets[idx]
-                        PresetSwatch(
-                            p, Modifier.weight(1f),
-                            onClick = { view.hapticSelect(); vm.applyPreset(p) },
-                            onLongClick = { view.hapticTick(); removing = idx },
-                        )
-                    }
-                }
-                repeat(5 - row.size) { Box(Modifier.weight(1f)) } // keep tile widths consistent
-            }
-        }
+        AddDot { view.hapticSelect(); adding = true }
     }
 
     if (adding) {
@@ -212,7 +214,7 @@ private fun PresetsSection(s: UiState, vm: MainViewModel) {
     }
 }
 
-private const val ADD_TILE = -1
+private val DotSize = 60.dp
 
 /** Small pill shown only when there's something to say (updating / offline). */
 @Composable
@@ -233,47 +235,53 @@ private fun StatusChip(s: UiState) {
     }
 }
 
+/** A round preset swatch in the light's real colour: tap to apply, long-press to remove. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PresetSwatch(p: Preset, modifier: Modifier, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun PresetDot(p: Preset, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = Arva.colors
     val colour = if (p.temperature != null) whiteColor(p.temperature) else Color.hsv(p.hue ?: 0f, p.saturation, 1f)
-    Column(
-        modifier
-            .clip(RadiusControl)
-            .combinedClickable(onClickLabel = "Set ${p.label}", onLongClickLabel = "Remove ${p.label}", onClick = onClick, onLongClick = onLongClick)
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+    Box(
+        Modifier
+            .size(DotSize)
+            .clip(CircleShape)
+            .background(colour)
+            .border(1.dp, c.line, CircleShape)
+            .combinedClickable(onClickLabel = "Set ${p.label}", onLongClickLabel = "Remove ${p.label}", onClick = onClick, onLongClick = onLongClick),
+    )
+}
+
+/** The first dot: opens the colour / temperature picker. */
+@Composable
+private fun PickerDot(onClick: () -> Unit) {
+    val c = Arva.colors
+    Box(
+        Modifier
+            .size(DotSize)
+            .clip(CircleShape)
+            .background(c.sunken)
+            .border(1.dp, c.line, CircleShape)
+            .clickable(onClickLabel = "Pick a colour", onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RadiusControl)
-                .background(colour)
-                .border(1.dp, c.line, RadiusControl),
-        )
-        Text(p.label, style = MaterialTheme.typography.bodySmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize), color = c.text2, maxLines = 1)
+        Icon(painterResource(R.drawable.ic_palette), contentDescription = null, tint = c.accent, modifier = Modifier.size(24.dp))
     }
 }
 
-/** The "+" tile that saves the current colour as a new preset. */
+/** The "+" dot that saves the current colour as a new preset. */
 @Composable
-private fun AddPresetTile(modifier: Modifier, onClick: () -> Unit) {
+private fun AddDot(onClick: () -> Unit) {
     val c = Arva.colors
-    Column(
-        modifier.clip(RadiusControl).clickable(onClickLabel = "Save current colour", onClick = onClick).padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+    Box(
+        Modifier
+            .size(DotSize)
+            .clip(CircleShape)
+            .background(c.sunken)
+            .border(1.dp, c.line, CircleShape)
+            .clickable(onClickLabel = "Save current colour", onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier.fillMaxWidth().aspectRatio(1f).clip(RadiusControl).background(c.sunken).border(1.dp, c.line, RadiusControl),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("+", style = MaterialTheme.typography.headlineMedium, color = c.accent)
-        }
-        Text("Save", style = MaterialTheme.typography.bodySmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize), color = c.text2, maxLines = 1)
+        Text("+", style = MaterialTheme.typography.headlineMedium, color = c.accent)
     }
 }
 

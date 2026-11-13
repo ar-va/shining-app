@@ -1,5 +1,6 @@
 package com.arva.shining.ui
 
+import android.os.Build
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
@@ -26,3 +27,17 @@ fun motionMs(ms: Int): Int = if (animationsOn()) ms else 0
 fun View.hapticTick() = performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
 
 fun View.hapticSelect() = performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+
+/**
+ * A stronger, more deliberate haptic for turning the light on or off — distinct from the light
+ * [hapticSelect] used for brightness steps. Uses the platform toggle effects where available.
+ */
+fun View.hapticToggle(on: Boolean) {
+    val constant = when {
+        Build.VERSION.SDK_INT >= 34 ->
+            if (on) HapticFeedbackConstants.TOGGLE_ON else HapticFeedbackConstants.TOGGLE_OFF
+        Build.VERSION.SDK_INT >= 30 -> HapticFeedbackConstants.CONFIRM
+        else -> HapticFeedbackConstants.LONG_PRESS
+    }
+    performHapticFeedback(constant)
+}

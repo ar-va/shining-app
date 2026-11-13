@@ -54,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -148,17 +149,26 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             }
 
             if (items.isEmpty()) {
-                ArvaCard(padding = PaddingValues(24.dp)) {
-                    Text("No automations yet", style = MaterialTheme.typography.titleLarge, color = c.text)
-                    Text(
-                        "Add a schedule, a sunset or sunrise trigger, or have the light come on when you get home.",
-                        style = MaterialTheme.typography.bodyMedium, color = c.text2,
-                    )
+                Text("No automations yet", style = MaterialTheme.typography.titleLarge, color = c.text)
+                Text(
+                    "Start with one of these — tap to add it, then fine-tune the time and look.",
+                    style = MaterialTheme.typography.bodyMedium, color = c.text2,
+                )
+                starters().forEach { st ->
+                    StarterRow(st) {
+                        val a = st.toAutomation()
+                        store.save(a)
+                        Scheduler.rescheduleAll(context)
+                        onEdit(a.id) // open the editor pre-filled so they can tweak it
+                    }
                 }
+                Spacer(Modifier.height(4.dp))
+                GroupLabel("Or build your own")
+            } else {
+                items.forEach { a -> AutomationCard(a, location, now, results[a.id], onClick = { onEdit(a.id) }) }
             }
-            items.forEach { a -> AutomationCard(a, location, now, results[a.id], onClick = { onEdit(a.id) }) }
 
-            PrimaryButton("Add automation", onClick = { onEdit(null) }, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(if (items.isEmpty()) "Custom automation" else "Add automation", onClick = { onEdit(null) }, modifier = Modifier.fillMaxWidth())
 
             if (location != null && needsLocation) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +178,7 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             }
 
             Spacer(Modifier.height(8.dp))
-            OtherAppsHelp()
+            ExpandableCard("Links & other apps") { OtherAppsHelpContent() }
         }
     }
 }
@@ -310,24 +320,78 @@ private suspend fun approximateLocation(context: Context): GeoPoint? {
     }
 }
 
+/** Tappable "starter" automations shown in the empty state (like Home's suggestions). */
+private class Starter(
+    val icon: Int,
+    val title: String,
+    val subtitle: String,
+    val trigger: Trigger,
+    val command: LightCommand,
+) {
+    fun toAutomation() = Automation(trigger = trigger, command = command)
+}
+
+private fun starters(): List<Starter> = listOf(
+    Starter(R.drawable.ic_sun, "Warm up at sunset", "Dim warm light when the sun goes down",
+        Trigger.Sun(SunTimes.Event.SUNSET, 0), LightCommand(preset = "Warm", brightness = 40)),
+    Starter(R.drawable.ic_clock, "Wake-up light at 7:00", "Soft daylight every morning",
+        Trigger.Time(LocalTime.of(7, 0)), LightCommand(preset = "Daylight", brightness = 60)),
+    Starter(R.drawable.ic_sun, "Off at sunrise", "Turn the light off when it gets light out",
+        Trigger.Sun(SunTimes.Event.SUNRISE, 0), LightCommand(power = LightCommand.Power.OFF)),
+    Starter(R.drawable.ic_wifi, "On when I get home", "Comes on as you arrive, after dark",
+        Trigger.Arrive(afterDark = true, notAfter = null), LightCommand(power = LightCommand.Power.ON)),
+)
+
 @Composable
-private fun OtherAppsHelp() {
+private fun StarterRow(st: Starter, onAdd: () -> Unit) {
     val c = Arva.colors
-    ArvaCard(padding = PaddingValues(20.dp)) {
-        Text("Use with other apps", style = MaterialTheme.typography.titleLarge, color = c.text)
-        Text(
-            "Long-press the Shining icon for quick actions. These links work from NFC tags and any app that opens links:",
-            style = MaterialTheme.typography.bodySmall, color = c.text2,
-        )
-        CodeLine("shining://light?power=off")
-        CodeLine("shining://light?preset=Warm&brightness=40")
-        Text(
-            "Tasker or MacroDroid: send a broadcast with action com.arva.shining.action.LIGHT to package com.arva.shining and an extra \"command\" such as:",
-            style = MaterialTheme.typography.bodySmall, color = c.text2,
-        )
-        CodeLine("power=toggle")
-        CodeLine("hue=230&saturation=80&brightness=60")
+    ArvaCard(onClick = onAdd, padding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            TriggerBadge(st.icon, st.command, enabled = true)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(st.title, style = MaterialTheme.typography.titleSmall, color = c.text)
+                Text(st.subtitle, style = MaterialTheme.typography.bodySmall, color = c.text2)
+            }
+            Text("+", style = MaterialTheme.typography.headlineSmall, color = c.accent, modifier = Modifier.padding(end = 4.dp))
+        }
     }
+}
+
+/** A card whose body collapses behind a tappable title + chevron. */
+@Composable
+private fun ExpandableCard(title: String, content: @Composable () -> Unit) {
+    val c = Arva.colors
+    var open by rememberSaveable { mutableStateOf(false) }
+    ArvaCard(padding = PaddingValues(20.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RadiusControl).clickable { open = !open },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(title, style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.weight(1f))
+            Icon(
+                painterResource(R.drawable.ic_chevron_down), contentDescription = if (open) "Collapse" else "Expand",
+                tint = c.text2, modifier = Modifier.size(22.dp).rotate(if (open) 180f else 0f),
+            )
+        }
+        if (open) content()
+    }
+}
+
+@Composable
+private fun OtherAppsHelpContent() {
+    val c = Arva.colors
+    Text(
+        "Long-press the Shining icon for quick actions. These links work from NFC tags and any app that opens links:",
+        style = MaterialTheme.typography.bodySmall, color = c.text2,
+    )
+    CodeLine("shining://light?power=off")
+    CodeLine("shining://light?preset=Warm&brightness=40")
+    Text(
+        "Tasker or MacroDroid: send a broadcast with action com.arva.shining.action.LIGHT to package com.arva.shining and an extra \"command\" such as:",
+        style = MaterialTheme.typography.bodySmall, color = c.text2,
+    )
+    CodeLine("power=toggle")
+    CodeLine("hue=230&saturation=80&brightness=60")
 }
 
 @Composable

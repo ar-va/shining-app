@@ -49,7 +49,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.arva.shining.BuildConfig
 import com.arva.shining.MainViewModel
+import com.arva.shining.Updater
 import com.arva.shining.Preset
 import com.arva.shining.R
 import com.arva.shining.UiState
@@ -58,6 +60,13 @@ import com.arva.shining.UiState
 fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations: () -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val c = Arva.colors
+
+    // Quiet, one-shot update check on open: if GitHub has a newer release, offer it (dismissable).
+    var updateVersion by remember { mutableStateOf<String?>(null) }
+    var updateDismissed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        Updater.checkLatest()?.let { if (Updater.isNewer(it.version, BuildConfig.VERSION_NAME)) updateVersion = it.version }
+    }
 
     // Live sync: while the screen is on top, poll quietly so external changes (voice, another phone)
     // show up and the socket stays warm for snappy slider response.
@@ -83,6 +92,7 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
         Box(Modifier.fillMaxWidth().height(2.dp)) {
             if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent, trackColor = c.bg)
         }
+        updateVersion?.takeIf { !updateDismissed }?.let { v -> UpdateBanner(v, onOpenSettings) { updateDismissed = true } }
         if (!s.configured) {
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(20.dp),
@@ -91,6 +101,25 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
         } else {
             Controls(s, vm)
         }
+    }
+}
+
+/** A slim banner offering an available update; tap to open Settings' Updates card, or dismiss. */
+@Composable
+private fun UpdateBanner(version: String, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    val c = Arva.colors
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(c.accent.copy(alpha = 0.12f))
+            .clickable(onClickLabel = "Open update", onClick = onOpen)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Shining $version is available", style = MaterialTheme.typography.bodyMedium, color = c.text, modifier = Modifier.weight(1f))
+        Text("Update", style = MaterialTheme.typography.bodyMedium, color = c.accent)
+        Text("✕", style = MaterialTheme.typography.bodyMedium, color = c.text2, modifier = Modifier.clickable(onClickLabel = "Dismiss", onClick = onDismiss).padding(start = 4.dp))
     }
 }
 

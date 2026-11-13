@@ -18,6 +18,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- In-app update: download the release APK from GitHub and hand it to the package installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".LightApp"
         android:enableOnBackInvokedCallback="true"
@@ -78,6 +81,17 @@
                 <action android:name="com.arva.shining.action.LIGHT" />
             </intent-filter>
         </receiver>
+
+        <!-- Serves the downloaded update APK to the system installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <service
             android:name=".automation.PresenceJobService"

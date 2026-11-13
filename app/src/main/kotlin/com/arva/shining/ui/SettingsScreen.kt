@@ -1,5 +1,8 @@
 package com.arva.shining.ui
 
+import com.arva.shining.BuildConfig
+import androidx.core.net.toUri
+import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -189,7 +192,31 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
 
             AppearanceCard()
             PresetsCard()
+            AboutFooter()
         }
+    }
+}
+
+/** App version and repository link, at the very bottom of Settings. */
+@Composable
+private fun AboutFooter() {
+    val c = Arva.colors
+    val context = LocalContext.current
+    val repo = "https://github.com/ar-va/shining-app"
+    Column(
+        Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text("Shining ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = c.text2)
+        Text(
+            "github.com/ar-va/shining-app",
+            style = MaterialTheme.typography.bodySmall,
+            color = c.accent,
+            modifier = Modifier.clickable {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, repo.toUri())) }
+            },
+        )
     }
 }
 

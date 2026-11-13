@@ -7,17 +7,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.fillMaxHeight
 import kotlinx.coroutines.delay
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +21,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -43,31 +39,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arva.shining.MainViewModel
 import com.arva.shining.Preset
 import com.arva.shining.R
 import com.arva.shining.UiState
-import kotlin.math.roundToInt
 
 @Composable
 fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations: () -> Unit) {
@@ -98,15 +81,13 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
         Box(Modifier.fillMaxWidth().height(2.dp)) {
             if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent, trackColor = c.bg)
         }
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            if (!s.configured) SetupPrompt(onOpenSettings) else Controls(s, vm)
+        if (!s.configured) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) { SetupPrompt(onOpenSettings) }
+        } else {
+            Controls(s, vm)
         }
     }
 }
@@ -127,40 +108,49 @@ private fun SetupPrompt(onOpenSettings: () -> Unit) {
 }
 
 @Composable
-private fun Controls(s: UiState, vm: MainViewModel) {
+private fun ColumnScope.Controls(s: UiState, vm: MainViewModel) {
     val c = Arva.colors
     val view = LocalView.current
     val toggle = { view.hapticTick(); vm.togglePower() }
 
-    // Title + a quiet live status chip.
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(s.name, style = MaterialTheme.typography.headlineMedium, color = c.text, modifier = Modifier.weight(1f))
-        StatusChip(s)
-    }
-
-    LightHero(s, onToggle = toggle, onBrightness = vm::setBrightness)
-
-    // Adjustments
-    ArvaCard {
-        Segmented(listOf(true to "Colour", false to "White"), s.colourMode, vm::setColourMode)
-        val dim = if (c == ArvaDark) c.bg else c.text
-        val lightColor = lightColourOf(s)
-        if (s.colourMode) {
-            ColorSlider("Colour", s.hue / 360f, colourName(s.hue), { vm.setHue(it * 360f) }, HueTrack)
-            ColorSlider(
-                "Saturation", s.saturation, "${(s.saturation * 100).roundToInt()}%", vm::setSaturation,
-                Brush.horizontalGradient(listOf(Color.White, Color.hsv(s.hue, 1f, 1f))),
-            )
-        } else {
-            ColorSlider("Warmth", s.temperature, warmthName(s.temperature), vm::setTemperature, WarmthTrack)
+    // Fixed header: name + status, then the brightness capsule (vertical drag lives here, outside the
+    // scroll below, so dragging it never fights the page scroll).
+    Column(
+        Modifier.padding(horizontal = 20.dp).padding(top = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(s.name, style = MaterialTheme.typography.headlineMedium, color = c.text, modifier = Modifier.weight(1f))
+            StatusChip(s)
         }
-        ColorSlider(
-            "Brightness", s.brightness, "${(s.brightness * 100).roundToInt()}%", vm::setBrightness,
-            Brush.horizontalGradient(listOf(dim, lightColor)),
-        )
+        BrightnessCapsule(s, onToggle = toggle, onBrightness = vm::setBrightness)
     }
 
-    PresetsSection(s, vm)
+    // Scrollable controls.
+    Column(
+        Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp)
+            .padding(top = 16.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        BrightnessStepper(s, onBrightness = vm::setBrightness)
+        PrimaryButton(if (s.on) "Turn off" else "Turn on", toggle, Modifier.fillMaxWidth())
+
+        ArvaCard {
+            Segmented(listOf(true to "Colour", false to "Temperature"), s.colourMode, vm::setColourMode)
+            if (s.colourMode) {
+                ColourWheel(s.hue, s.saturation, vm::setHsv)
+            } else {
+                ColorSlider("Temperature", s.temperature, warmthName(s.temperature), vm::setTemperature, WarmthTrack)
+            }
+        }
+
+        PresetsSection(s, vm)
+    }
 }
 
 /** Editable presets grid: tap to apply, long-press to remove, "+" to save the current colour. */
@@ -240,79 +230,6 @@ private fun StatusChip(s: UiState) {
     ) {
         Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
         Text(label, style = MaterialTheme.typography.bodySmall, color = c.text2)
-    }
-}
-
-/**
- * The light hero as a Google-Home-style brightness bar: the filled width shows brightness in the
- * light's colour, the rest is a dim track. Tap toggles; drag along it sets brightness by position.
- */
-@Composable
-private fun LightHero(s: UiState, onToggle: () -> Unit, onBrightness: (Float) -> Unit) {
-    val c = Arva.colors
-    val base = lightColourOf(s)
-    val lit = if (s.on) base else c.sunken                       // the filled, "bright" part
-    val track = if (s.on) lerp(base, c.bg, 0.82f) else c.sunken  // the empty remainder
-    val fillColour by animateColorAsState(lit, tween(motionMs(260)), label = "heroFill")
-    val trackColour by animateColorAsState(track, tween(motionMs(260)), label = "heroTrack")
-    // Fill width tracks brightness directly (no tween) so dragging follows the finger 1:1.
-    val fraction = if (s.on) s.brightness.coerceIn(0.04f, 1f) else 0f
-    val onFill = if (s.on) onColourOf(base) else c.text2
-
-    var widthPx by remember { mutableFloatStateOf(1f) }
-    var pressed by remember { mutableStateOf(false) }
-    val pressScale by animateFloatAsState(if (pressed) 0.99f else 1f, tween(motionMs(120)), label = "heroPress")
-
-    ArvaCard(padding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1.9f)
-                .scale(pressScale)
-                .clip(RadiusCard)
-                .background(trackColour)
-                .border(1.dp, c.line, RadiusCard)
-                .onSizeChanged { widthPx = it.width.toFloat().coerceAtLeast(1f) }
-                // Drag anywhere along the bar to set brightness by position (absolute, like Google Home).
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { onBrightness((it.x / widthPx).coerceIn(0f, 1f)) },
-                    ) { change, _ ->
-                        change.consume()
-                        onBrightness((change.position.x / widthPx).coerceIn(0f, 1f))
-                    }
-                }
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onPress = { pressed = true; tryAwaitRelease(); pressed = false },
-                        onTap = { onToggle() },
-                    )
-                }
-                .semantics {
-                    contentDescription = "Light"
-                    stateDescription = if (s.on) stateDescriptor(s) else "Off"
-                },
-            contentAlignment = Alignment.BottomStart,
-        ) {
-            // Filled portion = brightness level, in the light's colour with a soft emission highlight.
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraction)
-                    .background(if (s.on) Brush.verticalGradient(listOf(lerp(fillColour, Color.White, 0.12f), fillColour)) else Brush.linearGradient(listOf(fillColour, fillColour))),
-            )
-            Text(
-                text = when {
-                    !s.connected && s.error == null -> "Connecting…"
-                    s.on -> stateDescriptor(s)
-                    else -> "Off"
-                },
-                style = MaterialTheme.typography.titleSmall,
-                color = onFill,
-                modifier = Modifier.padding(16.dp),
-            )
-        }
-        PrimaryButton(if (s.on) "Turn off" else "Turn on", onToggle, Modifier.fillMaxWidth())
     }
 }
 

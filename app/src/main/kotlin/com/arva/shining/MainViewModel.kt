@@ -160,6 +160,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         sendCurrentMode()
     }
 
+    /** Hue and saturation together, from the 2-D colour wheel. */
+    fun setHsv(h: Float, s: Float) {
+        _state.update { it.copy(hue = h, saturation = s, colourMode = true, on = true) }
+        sendCurrentMode()
+    }
+
     fun setTemperature(t: Float) {
         _state.update { it.copy(temperature = t, colourMode = false, on = true) }
         sendCurrentMode()

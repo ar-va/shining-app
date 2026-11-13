@@ -17,3 +17,6 @@ snapshot.json
 __pycache__/
 # QR images from tools/setup_qr.py --png contain the local key
 setup-qr.png
+
+# AI assistant project notes — kept local, not published
+CLAUDE.md

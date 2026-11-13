@@ -18,13 +18,22 @@ class OpenBekenLight(
     private val host: String,
     private val port: Int = 80,
     private val network: Network? = null,
+    private val username: String = "admin",
+    private val password: String = "",
     private val timeoutMs: Int = 5000,
 ) : LightDriver {
+
+    // Pre-computed HTTP Basic header, sent only when a web password is set (OpenBeken guards /cm).
+    private val authHeader: String? =
+        if (password.isNotEmpty())
+            "Basic " + java.util.Base64.getEncoder().encodeToString("$username:$password".toByteArray(Charsets.UTF_8))
+        else null
 
     override val isConnected: Boolean get() = true // HTTP is per-request; nothing to hold open
 
     override fun read(): DriverReading {
-        val json = request("State")
+        // Real OpenBeken reports live state via "Status 11" (nested under StatusSTS). "State" is empty.
+        val json = request("Status 11")
         val state = OpenBekenProtocol.parseState(json)
             ?: throw TuyaException("This device didn't answer like an OpenBeken light")
         return DriverReading(state = state, schema = null, detail = mapOf("state" to json))
@@ -39,22 +48,26 @@ class OpenBekenLight(
 
     companion object {
         /** Builds a driver from an address that may include a port, e.g. "192.168.1.50" or "10.0.2.2:8080". */
-        fun fromAddress(address: String, network: Network? = null): OpenBekenLight {
+        fun fromAddress(address: String, network: Network? = null, username: String = "admin", password: String = ""): OpenBekenLight {
             val trimmed = address.trim()
             val host = trimmed.substringBefore(':')
             val port = trimmed.substringAfter(':', "").toIntOrNull() ?: 80
-            return OpenBekenLight(host, port, network)
+            return OpenBekenLight(host, port, network, username, password)
         }
     }
 
     private fun request(cmnd: String): String {
-        val url = URL("http://$host:$port/cm?cmnd=${URLEncoder.encode(cmnd, "UTF-8")}")
+        // Encode spaces as %20, not "+": OpenBeken's command parser treats "+" literally.
+        val encoded = URLEncoder.encode(cmnd, "UTF-8").replace("+", "%20")
+        val url = URL("http://$host:$port/cm?cmnd=$encoded")
         val conn = (if (network != null) network.openConnection(url) else url.openConnection()) as HttpURLConnection
         return try {
             conn.connectTimeout = timeoutMs
             conn.readTimeout = timeoutMs
             conn.requestMethod = "GET"
+            authHeader?.let { conn.setRequestProperty("Authorization", it) }
             val code = conn.responseCode
+            if (code == 401) throw TuyaException("The light needs a web password — set it in the OpenBeken fields below")
             if (code !in 200..299) throw TuyaException("The light returned HTTP $code")
             conn.inputStream.bufferedReader().use { it.readText() }
         } catch (e: IOException) {

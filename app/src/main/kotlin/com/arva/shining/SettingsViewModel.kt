@@ -35,6 +35,8 @@ data class SettingsState(
     val id: String = "",
     val key: String = "",
     val version: TuyaVersion = TuyaVersion.V33,
+    val obUser: String = "admin",
+    val obPassword: String = "",
     val scanning: Boolean = false,
     val found: List<DiscoveredDevice> = emptyList(),
     val scanMessage: String? = null,
@@ -44,7 +46,10 @@ data class SettingsState(
     val isOpenBeken: Boolean get() = kind == LightKind.OPENBEKEN
 
     fun toConfig() = if (isOpenBeken) {
-        DeviceConfig(name.trim().ifEmpty { "Lightstrip" }, id = "", ip = ip.trim(), localKey = "", version = TuyaVersion.V33, kind = LightKind.OPENBEKEN)
+        DeviceConfig(
+            name.trim().ifEmpty { "Lightstrip" }, id = "", ip = ip.trim(), localKey = "", version = TuyaVersion.V33,
+            kind = LightKind.OPENBEKEN, username = obUser.trim().ifEmpty { "admin" }, password = obPassword,
+        )
     } else {
         DeviceConfig(name.trim().ifEmpty { "Lightstrip" }, id.trim(), ip.trim(), key, version, kind = LightKind.TUYA)
     }
@@ -53,7 +58,7 @@ data class SettingsState(
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(
         app.lightApp.store.load()?.let {
-            SettingsState(kind = it.kind, name = it.name, ip = it.ip, id = it.id, key = it.localKey, version = it.version)
+            SettingsState(kind = it.kind, name = it.name, ip = it.ip, id = it.id, key = it.localKey, version = it.version, obUser = it.username, obPassword = it.password)
         } ?: SettingsState()
     )
     val state: StateFlow<SettingsState> = _state
@@ -106,7 +111,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val text = withContext(Dispatchers.IO) {
                 runCatching {
                     if (s.isOpenBeken) {
-                        val state = OpenBekenLight.fromAddress(cfg.ip).read().state
+                        val state = OpenBekenLight.fromAddress(cfg.ip, username = cfg.username, password = cfg.password).read().state
                         "Connected to OpenBeken.\n" + (state?.let { "Power ${if (it.on) "on" else "off"}, brightness ${(it.brightness * 100).toInt()}%" } ?: "")
                     } else {
                         val dps = TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).use { it.status() }

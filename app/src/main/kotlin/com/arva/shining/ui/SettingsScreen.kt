@@ -145,6 +145,13 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                     if (s.isOpenBeken) "IP address (from the OpenBeken page)" else "IP address",
                     mono = true, keyboardType = KeyboardType.Uri,
                 )
+                if (s.isOpenBeken) {
+                    ArvaField(s.obUser, { v -> vm.edit { it.copy(obUser = v) } }, "Web username (usually admin)")
+                    ArvaField(
+                        s.obPassword, { v -> vm.edit { it.copy(obPassword = v) } }, "Web password",
+                        supporting = "OpenBeken's login — leave blank if you didn't set one",
+                    )
+                }
                 if (!s.isOpenBeken) {
                     ArvaField(s.id, { v -> vm.edit { it.copy(id = v) } }, "Device ID", mono = true)
                     ArvaField(

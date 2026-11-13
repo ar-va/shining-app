@@ -3,7 +3,7 @@
 Fake OpenBeken RGBCW light for testing Shining's OpenBeken driver without flashing hardware.
 
 Implements the subset of the Tasmota-style HTTP console Shining uses:
-    GET /cm?cmnd=State
+    GET /cm?cmnd=Status 11      (state as real OpenBeken: {"StatusSTS": {...}})
     GET /cm?cmnd=led_enableAll 1|0
     GET /cm?cmnd=Dimmer N          (also led_dimmer)
     GET /cm?cmnd=HSBColor h,s,b
@@ -13,11 +13,13 @@ Implements the subset of the Tasmota-style HTTP console Shining uses:
 Then set the light up in the app as an OpenBeken device with IP "<host>:8080".
 """
 import argparse
+import base64
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 state = {"on": False, "dimmer": 60, "white": True, "hue": 30, "sat": 0, "ct": 370}
+AUTH = None  # when set to "user:pass", /cm requires HTTP Basic auth (like real OpenBeken)
 
 
 def handle_command(cmnd: str):
@@ -56,10 +58,25 @@ class Handler(BaseHTTPRequestHandler):
         if url.path != "/cm":
             self.send_error(404)
             return
+        if AUTH is not None:
+            expected = "Basic " + base64.b64encode(AUTH.encode()).decode()
+            if self.headers.get("Authorization") != expected:
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Basic realm="OpenBeken HTTP Server"')
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                print(f"  401 (missing/wrong auth)", flush=True)
+                return
         cmnd = parse_qs(url.query).get("cmnd", [""])[0]
         handle_command(cmnd)
-        body = json.dumps(report()).encode()
-        print(f"  {cmnd!r:40} -> {body.decode()}", flush=True)
+        name = cmnd.strip().split(None, 1)[0].lower() if cmnd.strip() else ""
+        if name == "status":
+            body = json.dumps({"StatusSTS": report()}).encode()
+        elif name == "state":
+            body = b""  # real OpenBeken returns nothing for "State"
+        else:
+            body = json.dumps(report()).encode()
+        print(f"  {cmnd!r:40} -> {body.decode() or '(empty)'}", flush=True)
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -71,11 +88,15 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global AUTH
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8080)
+    ap.add_argument("--password", default="", help="if set, require HTTP Basic auth admin:<password>")
     args = ap.parse_args()
+    if args.password:
+        AUTH = f"admin:{args.password}"
     srv = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
-    print(f"mock OpenBeken light on :{args.port}", flush=True)
+    print(f"mock OpenBeken light on :{args.port}" + (f" (auth admin:{args.password})" if AUTH else ""), flush=True)
     srv.serve_forever()
 
 

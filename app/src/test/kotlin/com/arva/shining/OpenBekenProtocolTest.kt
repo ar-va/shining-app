@@ -76,6 +76,17 @@ class OpenBekenProtocolTest {
         assertNull(s.colour) // white leaves colour null so the UI keeps its hue/saturation
     }
 
+    @Test fun `parse real openbeken Status 11 nested under StatusSTS`() {
+        // Exact shape returned by real OpenBeken 1.18.x to "Status 11".
+        val json = """{"StatusSTS":{"Time":"0000-00-00T00:00:00","Uptime":"0T00:12:20","Dimmer":100,"Fade":"OFF","LedTable":"ON","Color":"91,36,1,0,0","HSBColor":"35,82,62","Channel":[35,14,0],"CT":155,"POWER":"ON","Wifi":{"RSSI":84}}}"""
+        val s = OpenBekenProtocol.parseState(json)!!
+        assertTrue(s.on)
+        assertEquals(LightMode.COLOUR, s.mode)
+        assertEquals(35f, s.colour!!.h, 0.5f)
+        assertEquals(0.82f, s.colour!!.s, 0.01f)
+        assertEquals(1f, s.brightness, 0.01f)
+    }
+
     @Test fun `parse rejects non-openbeken json`() {
         assertNull(OpenBekenProtocol.parseState("""{"dps":{"20":true}}"""))
         assertNull(OpenBekenProtocol.parseState("not json"))

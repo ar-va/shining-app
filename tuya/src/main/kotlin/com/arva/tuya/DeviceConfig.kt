@@ -25,6 +25,9 @@ data class DeviceConfig(
     val localKey: String,
     val version: TuyaVersion,
     val kind: LightKind = LightKind.TUYA,
+    /** OpenBeken HTTP Basic-auth credentials (its web UI login). Empty password = no auth. */
+    val username: String = "admin",
+    val password: String = "",
 ) {
     val isComplete: Boolean
         get() = when (kind) {

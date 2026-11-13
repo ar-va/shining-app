@@ -64,7 +64,9 @@ object OpenBekenProtocol {
 
     /** Parses OpenBeken's `State` JSON into a [LightState], or null if it isn't recognisable. */
     fun parseState(json: String): LightState? {
-        val obj = runCatching { Json.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return null
+        val root = runCatching { Json.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return null
+        // Real OpenBeken nests live state under "StatusSTS" (Status 11); the flat form (mock) has it at top level.
+        val obj = (root["StatusSTS"] as? JsonObject) ?: root
         val power = (obj["POWER"] as? JsonPrimitive)?.contentOrNull
             ?: (obj["POWER1"] as? JsonPrimitive)?.contentOrNull
         val on = power?.equals("ON", ignoreCase = true) ?: return null

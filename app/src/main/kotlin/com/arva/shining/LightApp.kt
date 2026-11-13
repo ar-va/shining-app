@@ -54,7 +54,11 @@ class ConfigStore(context: Context) {
         return when (kind) {
             LightKind.OPENBEKEN ->
                 if (ip.isBlank()) null
-                else DeviceConfig(name, id = "", ip = ip, localKey = "", version = TuyaVersion.V33, kind = LightKind.OPENBEKEN)
+                else DeviceConfig(
+                    name, id = "", ip = ip, localKey = "", version = TuyaVersion.V33, kind = LightKind.OPENBEKEN,
+                    username = prefs.getString("ob_user", "admin")?.ifBlank { "admin" } ?: "admin",
+                    password = prefs.getString("ob_pass", "") ?: "",
+                )
             LightKind.TUYA -> {
                 val id = prefs.getString("id", null) ?: return null
                 DeviceConfig(
@@ -72,6 +76,7 @@ class ConfigStore(context: Context) {
             putString("kind", cfg.kind.name)
             putString("name", cfg.name); putString("id", cfg.id); putString("ip", cfg.ip)
             putString("key", cfg.localKey); putString("version", cfg.version.text)
+            putString("ob_user", cfg.username); putString("ob_pass", cfg.password)
             remove("schema")
             // A different device: forget the cached look.
             listOf("st_on", "st_colour", "st_hue", "st_sat", "st_bright", "st_temp").forEach(::remove)
@@ -173,7 +178,7 @@ class LightController(private val store: ConfigStore) {
 
     private fun buildDriver(cfg: DeviceConfig, network: Network?): LightDriver = when (cfg.kind) {
         LightKind.TUYA -> TuyaLightDriver(cfg, network, store.schema) { store.schema = it }
-        LightKind.OPENBEKEN -> OpenBekenLight.fromAddress(cfg.ip, network)
+        LightKind.OPENBEKEN -> OpenBekenLight.fromAddress(cfg.ip, network, cfg.username, cfg.password)
     }
 
     private fun scheduleIdleClose() {

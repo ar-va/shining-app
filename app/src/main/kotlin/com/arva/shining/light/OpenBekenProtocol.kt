@@ -74,13 +74,21 @@ object OpenBekenProtocol {
         val dimmer = (obj["Dimmer"] as? JsonPrimitive)?.intOrNull
         val hsb = (obj["HSBColor"] as? JsonPrimitive)?.contentOrNull?.split(",")?.mapNotNull { it.trim().toFloatOrNull() }
         val ct = (obj["CT"] as? JsonPrimitive)?.intOrNull
+        // Raw output channels R,G,B[,C,W]: the ground truth for which channels are lit.
+        val colorCh = (obj["Color"] as? JsonPrimitive)?.contentOrNull?.split(",")?.mapNotNull { it.trim().toIntOrNull() }
 
         val hue = hsb?.getOrNull(0) ?: 0f
         val sat = (hsb?.getOrNull(1) ?: 0f) / 100f
 
-        // White when there's no colour saturation; otherwise colour. Like Tuya, leave colour null
-        // in white mode so the UI keeps its last hue/saturation instead of snapping to grey.
-        val white = sat <= 0f
+        // Colour vs white: OpenBeken keeps HSBColor's saturation even in white/CT mode, so saturation
+        // alone misreports (a warm automation would still look like a colour). When the raw `Color`
+        // channels are known, white = the RGB channels are all off. Fall back to saturation otherwise.
+        val rgbOff = colorCh != null && colorCh.size >= 3 && colorCh[0] == 0 && colorCh[1] == 0 && colorCh[2] == 0
+        val white = when {
+            !on -> sat <= 0f            // off: channels are all zero, so trust the remembered saturation
+            colorCh != null -> rgbOff
+            else -> sat <= 0f
+        }
         // Brightness source depends on mode: in colour mode Shining sets it via HSBColor's value, and
         // the master `Dimmer` can stay at 100 — reading Dimmer there made the UI snap back to full.
         // In white/CT mode brightness is the `Dimmer` Shining sends alongside `CT`.

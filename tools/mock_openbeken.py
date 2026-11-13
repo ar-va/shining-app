@@ -39,7 +39,7 @@ def handle_command(cmnd: str):
         h, s, b = (arg.split(",") + ["", "", ""])[:3]
         state.update(white=False, hue=int(h or 0), sat=int(s or 100), vbri=int(b or state["vbri"]), on=True)  # colour value, NOT master dimmer
     elif name == "ct":
-        state.update(white=True, sat=0, ct=int(arg or state["ct"]), on=True)
+        state.update(white=True, ct=int(arg or state["ct"]), on=True)  # keep sat: real OB reports it even in white mode
     return None
 
 
@@ -48,8 +48,11 @@ def report():
     return {
         "POWER": "ON" if s["on"] else "OFF",
         "Dimmer": s["dimmer"],
-        "HSBColor": f"{s['hue']},{0 if s['white'] else s['sat']},{s['vbri']}",
+        "HSBColor": f"{s['hue']},{s['sat']},{s['vbri']}",
         "CT": s["ct"],
+        # Raw output channels R,G,B,C,W: RGB off in white mode, white channels off in colour mode.
+        "Color": (f"0,0,0,{s['dimmer']},{s['dimmer']}" if s["white"]
+                  else f"{max(1, s['vbri'] * 2)},{max(1, s['sat'])},1,0,0"),
     }
 
 

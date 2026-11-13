@@ -95,6 +95,22 @@ class OpenBekenProtocolTest {
         assertEquals(0.5f, s.brightness, 0.01f)
     }
 
+    @Test fun `white detected from Color channels despite residual HSBColor saturation`() {
+        // A warm automation: CT set and the white channels lit, but HSBColor still reports the old hue/sat.
+        val json = """{"POWER":"ON","Dimmer":50,"HSBColor":"35,82,62","CT":450,"Color":"0,0,0,200,120"}"""
+        val s = OpenBekenProtocol.parseState(json)!!
+        assertEquals(LightMode.WHITE, s.mode)
+        assertNull(s.colour) // must not look like orange any more
+        assertEquals(0.5f, s.brightness, 0.01f) // white brightness = Dimmer
+    }
+
+    @Test fun `colour detected from Color channels`() {
+        val json = """{"POWER":"ON","Dimmer":100,"HSBColor":"35,82,62","CT":450,"Color":"200,80,10,0,0"}"""
+        val s = OpenBekenProtocol.parseState(json)!!
+        assertEquals(LightMode.COLOUR, s.mode)
+        assertEquals(0.62f, s.brightness, 0.01f)
+    }
+
     @Test fun `parse rejects non-openbeken json`() {
         assertNull(OpenBekenProtocol.parseState("""{"dps":{"20":true}}"""))
         assertNull(OpenBekenProtocol.parseState("not json"))

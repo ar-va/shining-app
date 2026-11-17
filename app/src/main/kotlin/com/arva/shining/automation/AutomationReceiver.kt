@@ -59,11 +59,15 @@ class AutomationReceiver : BroadcastReceiver() {
             // A long-overdue alarm (phone was off) would switch the light at an odd time: skip it.
             if (abs(System.currentTimeMillis() - scheduled) > STALE_MS) {
                 store.setResult(id, "Skipped ${stamp(scheduled)}: phone was off or asleep")
+                if (automation.catchUp) store.setPending(id, scheduled) // run it when back home, if recent enough
                 return
             }
             runCatching { app.controller.run(automation.command) }
-                .onSuccess { store.setResult(id, "Ran ${stamp(scheduled)}") }
-                .onFailure { store.setResult(id, "Skipped ${stamp(scheduled)}: ${reason(it)}") }
+                .onSuccess { store.setResult(id, "Ran ${stamp(scheduled)}"); store.clearPending(id) }
+                .onFailure {
+                    store.setResult(id, "Skipped ${stamp(scheduled)}: ${reason(it)}")
+                    if (automation.catchUp) store.setPending(id, scheduled) // away → catch up on arrival home
+                }
         } finally {
             Scheduler.rescheduleAll(app)
         }

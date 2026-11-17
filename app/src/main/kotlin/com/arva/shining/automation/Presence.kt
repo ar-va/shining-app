@@ -39,6 +39,7 @@ object Presence {
     private const val JOB_PERIODIC = 4101
     private const val JOB_NOW = 4102
     private const val ARRIVAL_COOLDOWN_MS = 30 * 60_000L
+    private const val CATCHUP_WINDOW_MS = 8 * 60 * 60_000L // don't catch up a run missed more than 8 h ago
     private const val TAG = "Shining"
 
     /** Starts or stops tracking, depending on whether any arrival automation is enabled. */
@@ -98,8 +99,34 @@ object Presence {
         store.presence = State.HOME
         store.homeNetwork = network.toString()
         Log.i(TAG, "wifi available: home on $network, wasAway=$wasAway")
-        if (wasAway) runArrivals(app, snapshot, network)
+        if (wasAway) {
+            runCatchUp(app, network)
+            runArrivals(app, snapshot, network)
+        }
     }
+
+    /** Runs timed/sun automations that were missed while away, if they're still recent enough. */
+    private suspend fun runCatchUp(app: LightApp, network: Network) {
+        val store = app.automations
+        val now = System.currentTimeMillis()
+        val pending = store.pendingCatchUp()
+        if (pending.isEmpty()) return
+        Log.i(TAG, "catch-up: ${pending.size} pending")
+        for ((id, scheduled) in pending) {
+            store.clearPending(id)
+            val a = store.get(id)?.takeIf { it.enabled && it.catchUp } ?: continue
+            if (now - scheduled > CATCHUP_WINDOW_MS) {
+                store.setResult(id, "Missed ${stamp(scheduled)}: too long ago to catch up")
+                continue
+            }
+            runCatching { app.controller.run(a.command, network) }
+                .onSuccess { store.setResult(id, "Caught up ${stamp(now)} (missed while away)") }
+                .onFailure { store.setResult(id, "Catch-up failed: ${it.message ?: "error"}") }
+        }
+    }
+
+    private fun stamp(millis: Long): String =
+        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEE HH:mm"))
 
     private suspend fun runArrivals(app: LightApp, snapshot: LightController.Snapshot, network: Network) {
         val store = app.automations

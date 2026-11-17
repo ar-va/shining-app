@@ -447,6 +447,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
     var preset by rememberSaveable { mutableStateOf(cmd?.preset ?: "Warm") }
     var brightness by rememberSaveable { mutableStateOf(cmd?.brightness ?: 60) }
     var keepOff by rememberSaveable { mutableStateOf(cmd?.keepOff ?: false) }
+    var catchUp by rememberSaveable { mutableStateOf(existing?.catchUp ?: true) }
     var picking by remember { mutableStateOf<String?>(null) } // "time" | "quiet"
 
     fun build(): Automation {
@@ -462,7 +463,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
             DoKind.PRESET -> LightCommand(preset = preset, brightness = brightness, keepOff = keepOff)
         }
         val base = existing ?: Automation(trigger = trigger, command = command)
-        return base.copy(trigger = trigger, command = command, days = days.map { DayOfWeek.of(it) }.toSet())
+        return base.copy(trigger = trigger, command = command, days = days.map { DayOfWeek.of(it) }.toSet(), catchUp = catchUp)
     }
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
@@ -504,6 +505,18 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                     }
                 }
                 DayToggles(days) { days = it }
+                if (kind != WhenKind.ARRIVE) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Catch up when I get home", style = MaterialTheme.typography.titleSmall, color = c.text)
+                            Text(
+                                "If it's missed while you're away, run it when you're back on your home Wi-Fi (up to 8 h later).",
+                                style = MaterialTheme.typography.bodySmall, color = c.text2,
+                            )
+                        }
+                        ArvaSwitch(catchUp, "Catch up when I get home") { catchUp = it }
+                    }
+                }
             }
 
             EditorSection("Do") {

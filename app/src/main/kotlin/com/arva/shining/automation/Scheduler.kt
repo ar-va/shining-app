@@ -37,7 +37,12 @@ object Scheduler {
                 alarms.setWindow(AlarmManager.RTC_WAKEUP, at, 5 * 60_000L, intent)
             }
         }
-        Presence.update(context, store.items.value.any { it.enabled && it.trigger is Trigger.Arrive })
+        // Track home/away when any arrival automation OR any catch-up automation is enabled —
+        // both need to know when the phone reconnects to the home Wi-Fi.
+        Presence.update(
+            context,
+            store.items.value.any { it.enabled && (it.trigger is Trigger.Arrive || it.catchUp) },
+        )
     }
 
     fun cancel(context: Context, id: String) {

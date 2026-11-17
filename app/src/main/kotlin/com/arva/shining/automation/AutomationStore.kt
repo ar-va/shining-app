@@ -32,9 +32,18 @@ class AutomationStore(context: Context) {
     @Synchronized
     fun delete(id: String) {
         write(_items.value.filterNot { it.id == id })
-        prefs.edit { remove("result.$id") }
+        prefs.edit { remove("result.$id"); remove("pending.$id") }
         _results.value = _results.value - id
     }
+
+    // Timed/sun runs missed while away, to run on the next arrival home. id -> scheduled epoch millis.
+    fun pendingCatchUp(): Map<String, Long> =
+        prefs.all.filterKeys { it.startsWith("pending.") }
+            .mapNotNull { (k, v) -> (v as? Long)?.let { k.removePrefix("pending.") to it } }.toMap()
+
+    fun setPending(id: String, scheduledMillis: Long) = prefs.edit { putLong("pending.$id", scheduledMillis) }
+
+    fun clearPending(id: String) = prefs.edit { remove("pending.$id") }
 
     private fun write(list: List<Automation>) {
         prefs.edit { putString(KEY_LIST, Automation.listToJson(list)) }

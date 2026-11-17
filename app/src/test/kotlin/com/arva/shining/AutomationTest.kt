@@ -98,6 +98,7 @@ class AutomationTest {
             Automation(trigger = Trigger.Time(LocalTime.of(7, 5)), days = setOf(DayOfWeek.MONDAY), command = LightCommand.parse("preset=Warm&brightness=40")),
             Automation(enabled = false, trigger = Trigger.Sun(SunTimes.Event.SUNRISE, 30), command = LightCommand(power = LightCommand.Power.OFF)),
             Automation(trigger = Trigger.Arrive(true, LocalTime.of(23, 30)), command = LightCommand(power = LightCommand.Power.ON)),
+            Automation(trigger = Trigger.Time(LocalTime.of(22, 0)), command = LightCommand.parse("preset=Warm"), catchUp = false),
         )
         assertEquals(list, Automation.listFromJson(Automation.listToJson(list)))
         assertEquals(emptyList<Automation>(), Automation.listFromJson("not json"))

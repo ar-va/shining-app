@@ -41,6 +41,8 @@ data class Automation(
     val trigger: Trigger,
     val days: Set<DayOfWeek> = DayOfWeek.entries.toSet(),
     val command: LightCommand,
+    /** If a timed/sun run is missed while away, run it when the phone next reaches the light at home. */
+    val catchUp: Boolean = true,
 ) {
     /** Next time this automation should fire after [now], or null for event-based triggers. */
     fun nextRun(now: ZonedDateTime, location: GeoPoint?): ZonedDateTime? {
@@ -96,6 +98,7 @@ data class Automation(
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id)
         put("enabled", enabled)
+        put("catchUp", catchUp)
         put("days", buildJsonArray { days.sorted().forEach { add(JsonPrimitive(it.value)) } })
         put("command", command.toQuery())
         put("trigger", when (trigger) {
@@ -128,6 +131,7 @@ data class Automation(
             Automation(
                 id = o["id"]!!.jsonPrimitive.content,
                 enabled = o["enabled"]?.jsonPrimitive?.boolean ?: true,
+                catchUp = o["catchUp"]?.jsonPrimitive?.boolean ?: true,
                 trigger = trigger,
                 days = o["days"]?.jsonArray?.map { DayOfWeek.of(it.jsonPrimitive.int) }?.toSet() ?: DayOfWeek.entries.toSet(),
                 command = LightCommand.parse(o["command"]?.jsonPrimitive?.content),

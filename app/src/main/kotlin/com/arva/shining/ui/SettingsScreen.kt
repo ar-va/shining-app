@@ -41,6 +41,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -273,48 +275,78 @@ private sealed interface UpdateUi {
     data class Error(val message: String) : UpdateUi
 }
 
-/** Check GitHub for a newer release; opens the download in the browser (no in-app installer). */
+/**
+ * Auto-checks GitHub for a newer release on open and shows a clear status (✓ up to date / update
+ * available) plus when it last looked. Opens the download in the browser (no in-app installer).
+ */
 @Composable
 private fun UpdatesCard() {
     val c = Arva.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var ui by remember { mutableStateOf<UpdateUi>(UpdateUi.Idle) }
+    var lastChecked by remember { mutableStateOf<Long?>(null) }
+
+    fun check() {
+        ui = UpdateUi.Checking
+        scope.launch {
+            val rel = Updater.checkLatest()
+            lastChecked = System.currentTimeMillis()
+            ui = when {
+                rel == null -> UpdateUi.Error("Couldn't reach GitHub. Check your connection.")
+                Updater.isNewer(rel.version, BuildConfig.VERSION_NAME) -> UpdateUi.Available(rel)
+                else -> UpdateUi.UpToDate
+            }
+        }
+    }
+    LaunchedEffect(Unit) { check() } // check quietly when the card first appears
 
     SettingCard("Updates") {
-        Text("You're on Shining ${BuildConfig.VERSION_NAME}.", style = MaterialTheme.typography.bodySmall, color = c.text2)
+        Text("Shining ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall, color = c.text)
 
         when (val st = ui) {
             is UpdateUi.Available -> {
-                Text("Version ${st.release.version} is available.", style = MaterialTheme.typography.titleSmall, color = c.text)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(c.accent))
+                    Text("Version ${st.release.version} is available", style = MaterialTheme.typography.bodyMedium, color = c.text)
+                }
                 if (st.release.notes.isNotBlank()) {
                     Text(st.release.notes, style = MaterialTheme.typography.bodySmall, color = c.text2, maxLines = 8, overflow = TextOverflow.Ellipsis)
                 }
                 PrimaryButton("Get the update", onClick = { Updater.openDownload(context, st.release.downloadUrl) })
                 Text("Opens the download in your browser. Tap the APK to install it.", style = MaterialTheme.typography.bodySmall, color = c.text2)
             }
-            UpdateUi.UpToDate -> Text("You're up to date.", style = MaterialTheme.typography.bodyMedium, color = c.success)
+            UpdateUi.UpToDate -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = c.success, modifier = Modifier.size(18.dp))
+                Text("You're up to date", style = MaterialTheme.typography.bodyMedium, color = c.success)
+            }
             is UpdateUi.Error -> Text(st.message, style = MaterialTheme.typography.bodySmall, color = c.error)
             UpdateUi.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
-                Text("Checking…", style = MaterialTheme.typography.bodyMedium, color = c.text2)
+                Text("Checking for updates…", style = MaterialTheme.typography.bodyMedium, color = c.text2)
             }
             UpdateUi.Idle -> {}
         }
 
         if (ui != UpdateUi.Checking) {
-            SecondaryButton("Check for updates", onClick = {
-                ui = UpdateUi.Checking
-                scope.launch {
-                    val rel = Updater.checkLatest()
-                    ui = when {
-                        rel == null -> UpdateUi.Error("Couldn't reach GitHub. Check your connection.")
-                        Updater.isNewer(rel.version, BuildConfig.VERSION_NAME) -> UpdateUi.Available(rel)
-                        else -> UpdateUi.UpToDate
-                    }
-                }
-            })
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                lastChecked?.let {
+                    Text("Checked ${checkedAgo(it)}", style = MaterialTheme.typography.bodySmall, color = c.text2, modifier = Modifier.weight(1f))
+                } ?: Box(Modifier.weight(1f))
+                TextLink("Check again", onClick = { check() })
+            }
         }
+    }
+}
+
+/** "just now" / "2 min ago" / "3 h ago" for the update check timestamp. */
+private fun checkedAgo(millis: Long): String {
+    val s = (System.currentTimeMillis() - millis) / 1000
+    return when {
+        s < 60 -> "just now"
+        s < 3600 -> "${s / 60} min ago"
+        s < 86400 -> "${s / 3600} h ago"
+        else -> "${s / 86400} d ago"
     }
 }
 

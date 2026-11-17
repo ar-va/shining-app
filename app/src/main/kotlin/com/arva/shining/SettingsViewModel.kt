@@ -42,6 +42,7 @@ data class SettingsState(
     val scanMessage: String? = null,
     val testing: Boolean = false,
     val testResult: String? = null,
+    val online: Boolean? = null, // null = unknown/not checked yet
 ) {
     val isOpenBeken: Boolean get() = kind == LightKind.OPENBEKEN
 
@@ -63,7 +64,27 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     )
     val state: StateFlow<SettingsState> = _state
 
-    fun edit(transform: (SettingsState) -> SettingsState) = _state.update { transform(it).copy(testResult = null) }
+    fun edit(transform: (SettingsState) -> SettingsState) = _state.update { transform(it).copy(testResult = null, online = null) }
+
+    /** A quiet reachability check for the status chip (no spinner, no result text). */
+    fun probe() {
+        val s = _state.value
+        val cfg = s.toConfig()
+        if (!cfg.isComplete) {
+            _state.update { it.copy(online = false) }
+            return
+        }
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (s.isOpenBeken) OpenBekenLight.fromAddress(cfg.ip, username = cfg.username, password = cfg.password).read()
+                    else TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).use { it.status() }
+                    true
+                }.getOrDefault(false)
+            }
+            _state.update { it.copy(online = ok) }
+        }
+    }
 
     fun setKind(kind: LightKind) = edit { it.copy(kind = kind) }
 

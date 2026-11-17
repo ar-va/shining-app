@@ -20,6 +20,10 @@ import androidx.compose.runtime.collectAsState
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +66,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
     val c = Arva.colors
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    LaunchedEffect(Unit) { vm.probe() }
 
     // In-app QR scanner (CameraX + ZXing). Shown as a full-screen overlay once camera is allowed.
     var showScanner by remember { mutableStateOf(false) }
@@ -97,6 +102,11 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Eyebrow("Your light", Modifier.weight(1f))
+                StatusPill(s.online)
+            }
+
             // Light type
             SettingCard("Light type") {
                 Segmented(listOf(LightKind.TUYA to "Tuya", LightKind.OPENBEKEN to "OpenBeken"), s.kind, vm::setKind)
@@ -202,12 +212,33 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                 })
             }
 
+            Spacer(Modifier.height(4.dp))
+            Eyebrow("Personalize")
             AppearanceCard()
             AmbientCard()
-            UpdatesCard()
             PresetsCard()
+
+            Spacer(Modifier.height(4.dp))
+            Eyebrow("App")
+            UpdatesCard()
             AboutFooter()
         }
+    }
+}
+
+/** A small reachability chip beside the "Your light" header. Hidden until a probe has run. */
+@Composable
+private fun StatusPill(online: Boolean?) {
+    if (online == null) return
+    val c = Arva.colors
+    val (dot, label) = if (online) c.success to "Connected" else c.error to "Not reachable"
+    Row(
+        Modifier.clip(RadiusTag).background(c.sunken).padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
+        Text(label, style = MaterialTheme.typography.bodySmall, color = c.text2)
     }
 }
 

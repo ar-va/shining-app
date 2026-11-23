@@ -25,14 +25,14 @@ class OpenBekenProtocolTest {
             OpenBekenProtocol.commandsFor(LightCommand(preset = "Warm", brightness = 40), null),
         )
         assertEquals(
-            listOf("led_enableAll 1", "HSBColor 230,100,100"),
+            listOf("led_enableAll 1", "HSBColor 230,100,100", "Dimmer 100"),
             OpenBekenProtocol.commandsFor(LightCommand(preset = "Blue", brightness = 100), null),
         )
     }
 
     @Test fun `explicit colour and brightness-only`() {
         assertEquals(
-            listOf("led_enableAll 1", "HSBColor 240,80,50"),
+            listOf("led_enableAll 1", "HSBColor 240,80,50", "Dimmer 100"),
             OpenBekenProtocol.commandsFor(LightCommand(hue = 240, saturation = 80, brightness = 50), null),
         )
         // Brightness only keeps the current mode (just Dimmer).
@@ -90,7 +90,7 @@ class OpenBekenProtocolTest {
     @Test fun `brightness alone in colour mode goes through HSBColor`() {
         val orange = LightState(on = true, mode = LightMode.COLOUR, brightness = 0.5f, temperature = null, colour = Hsv(25f, 1f, 0.5f))
         assertEquals(
-            listOf("led_enableAll 1", "HSBColor 25,100,80"),
+            listOf("led_enableAll 1", "HSBColor 25,100,80", "Dimmer 100"),
             OpenBekenProtocol.commandsFor(LightCommand(brightness = 80), orange),
         )
     }
@@ -136,7 +136,15 @@ class OpenBekenProtocolTest {
         val s = OpenBekenProtocol.parseState(dim, LightMode.COLOUR)!!
         assertEquals(LightMode.COLOUR, s.mode)
         assertEquals(0.05f, s.brightness, 0.01f)
-        assertEquals(listOf("led_enableAll 1", "HSBColor 230,100,6"), OpenBekenProtocol.commandsFor(LightCommand(brightness = 6), s))
+        assertEquals(listOf("led_enableAll 1", "HSBColor 230,100,6", "Dimmer 100"), OpenBekenProtocol.commandsFor(LightCommand(brightness = 6), s))
+    }
+
+    @Test fun `a colour after dim white is not held down by the master dimmer`() {
+        val dimWhite = white.copy(brightness = 0.05f)
+        assertEquals(
+            listOf("led_enableAll 1", "HSBColor 25,100,50", "Dimmer 100"),
+            OpenBekenProtocol.commandsFor(LightCommand(preset = "Orange", brightness = 50), dimWhite),
+        )
     }
 
     @Test fun `dark channels with no known mode do not guess`() {

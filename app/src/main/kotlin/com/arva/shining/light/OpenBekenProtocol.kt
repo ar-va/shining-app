@@ -42,8 +42,7 @@ object OpenBekenProtocol {
         when {
             hue != null -> {
                 val sat = command.saturation ?: preset?.saturation?.let { (it * 100).roundToInt() } ?: 100
-                // HSBColor sets hue, saturation and brightness together and switches to RGB mode.
-                out += "HSBColor ${hue.coerceIn(0, 360)},${sat.coerceIn(0, 100)},$b"
+                out += colourCommands(hue, sat, b)
             }
             warmth != null -> {
                 out += "CT ${warmthToCt(warmth / 100f)}"
@@ -51,13 +50,20 @@ object OpenBekenProtocol {
             }
             // Brightness only, keeping the mode. Colour brightness lives in HSBColor, not the master Dimmer.
             command.brightness != null -> out += current?.colour?.takeIf { current.mode == LightMode.COLOUR }
-                ?.let { "HSBColor ${it.h.roundToInt()},${(it.s * 100).roundToInt()},$b" } ?: "Dimmer $b"
+                ?.let { colourCommands(it.h.roundToInt(), (it.s * 100).roundToInt(), b) } ?: listOf("Dimmer $b")
             // plain "on": nothing more to send
         }
         // Ensure it ends up off after storing the look.
         if (command.keepOff) out += "led_enableAll 0"
         return out
     }
+
+    /**
+     * The firmware multiplies HSBColor's brightness by the master Dimmer, which white mode can leave
+     * low, so the Dimmer goes back to 100. HSBColor first, so the old look never flashes at full.
+     */
+    private fun colourCommands(hue: Int, saturation: Int, brightness: Int) =
+        listOf("HSBColor ${hue.coerceIn(0, 360)},${saturation.coerceIn(0, 100)},$brightness", "Dimmer 100")
 
     /** The mode these console commands leave the light in, or null if they don't choose one. */
     fun modeSetBy(commands: List<String>): LightMode? =

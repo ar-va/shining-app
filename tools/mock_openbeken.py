@@ -45,16 +45,16 @@ def handle_command(cmnd: str):
 
 def report():
     s = state
-    # Real firmware applies gamma 2.2 and rounds down, so every channel reads 0 when off or at 8% or less.
-    dark = not s["on"] or (s["dimmer"] if s["white"] else s["vbri"]) <= 8
+    # Real firmware multiplies HSBColor's value by the master Dimmer, applies gamma 2.2 and rounds down.
+    level = s["dimmer"] / 100 * (1 if s["white"] else s["vbri"] / 100)
+    out = int(level ** 2.2 * 255) if s["on"] else 0
     return {
         "POWER": "ON" if s["on"] else "OFF",
         "Dimmer": s["dimmer"],
         "HSBColor": f"{s['hue']},{s['sat']},{s['vbri']}",
         "CT": s["ct"],
         # Raw output channels R,G,B,C,W: RGB off in white mode, white channels off in colour mode.
-        "Color": ("0,0,0,0,0" if dark else f"0,0,0,{s['dimmer']},{s['dimmer']}" if s["white"]
-                  else f"{max(1, s['vbri'] * 2)},{max(1, s['sat'])},1,0,0"),
+        "Color": f"0,0,0,{out},{out}" if s["white"] else f"{out},0,0,0,0",
     }
 
 

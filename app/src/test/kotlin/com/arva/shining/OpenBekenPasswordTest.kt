@@ -98,6 +98,18 @@ class OpenBekenPasswordTest {
         assertFalse(OpenBekenProtocol.isLoginChallenge(null))
     }
 
+    @Test fun `password rule`() {
+        fun may(print: String?, home: String?, trust: PasswordTrust) = NetworkFingerprint.maySendPassword(print, home, trust)
+        assertTrue(may("home", "home", PasswordTrust.KNOWN_NETWORK))
+        assertFalse(may("cafe", "home", PasswordTrust.KNOWN_NETWORK))
+        assertFalse(may("cafe", null, PasswordTrust.KNOWN_NETWORK))
+        assertTrue(may("home", null, PasswordTrust.FIRST_USE))
+        assertFalse(may("cafe", "home", PasswordTrust.FIRST_USE))
+        assertTrue(may("new-router", "home", PasswordTrust.CONFIRM))
+        assertFalse(may(null, "home", PasswordTrust.CONFIRM))
+        assertFalse(may(null, null, PasswordTrust.FIRST_USE))
+    }
+
     @Test fun `fingerprint uses the subnet, gateway and domain`() {
         assertEquals("192.168.1.0/24", NetworkFingerprint.subnet(byteArrayOf(192.toByte(), 168.toByte(), 1, 57), 24))
         assertEquals("10.20.0.0/14", NetworkFingerprint.subnet(byteArrayOf(10, 22, 9, 1), 14))

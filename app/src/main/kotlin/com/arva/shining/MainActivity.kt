@@ -8,12 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arva.shining.automation.Presence
 import kotlinx.coroutines.launch
 import com.arva.shining.ui.ShiningTheme
@@ -22,19 +22,32 @@ import com.arva.shining.ui.AutomationsScreen
 import com.arva.shining.ui.MainScreen
 import com.arva.shining.ui.PredictiveBackScreen
 import com.arva.shining.ui.SettingsScreen
-import com.arva.tuya.DeviceConfig
 
 class MainActivity : ComponentActivity() {
     private val main: MainViewModel by viewModels()
+    private val settings: SettingsViewModel by viewModels()
+    private var openSettings by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handleSetupLink(intent)
+        // Android hands back the original link when it restores the app; that link was already handled.
+        val restored = savedInstanceState != null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (!restored) handleSetupLink(intent)
         setContent {
             ShiningTheme {
                 // Simple saved route: "main", "settings", "automations", "edit:<id>" or "edit:"
                 var route by rememberSaveable { mutableStateOf("main") }
+                LaunchedEffect(openSettings) {
+                    if (openSettings) {
+                        route = "settings"
+                        openSettings = false
+                    }
+                }
+                val leaveSettings: () -> Unit = {
+                    settings.discard()
+                    route = "main"
+                }
                 // The home screen, reused both as the active route and as the "behind" page for
                 // predictive back previews.
                 val home = @Composable {
@@ -51,11 +64,10 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 when {
-                    route == "settings" -> PredictiveBackScreen(onBack = { route = "main" }, behind = home) {
-                        val settings: SettingsViewModel = viewModel()
+                    route == "settings" -> PredictiveBackScreen(onBack = leaveSettings, behind = home) {
                         SettingsScreen(
                             vm = settings,
-                            onBack = { route = "main" },
+                            onBack = leaveSettings,
                             onSave = { cfg ->
                                 main.applyConfig(cfg)
                                 route = "main"
@@ -90,15 +102,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** A link only fills in Settings. Nothing is saved until the person presses Save. */
     private fun handleSetupLink(intent: Intent?) {
         val link = intent?.data?.toString() ?: return
-        val cfg = DeviceConfig.fromSetupLink(link)
-        if (cfg == null || !cfg.isComplete) {
-            Toast.makeText(this, "That setup link is incomplete", Toast.LENGTH_LONG).show()
-        } else {
-            main.applyConfig(cfg)
-            Toast.makeText(this, "Saved “${cfg.name}”", Toast.LENGTH_SHORT).show()
-        }
         intent.data = null // don't re-apply on rotation
+        if (settings.pasteLink(link)) {
+            openSettings = true
+            Toast.makeText(this, "Check the details, then press Save", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "That setup link is incomplete", Toast.LENGTH_LONG).show()
+        }
     }
 }

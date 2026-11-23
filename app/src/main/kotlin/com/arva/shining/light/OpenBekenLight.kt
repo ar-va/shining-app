@@ -36,7 +36,8 @@ class OpenBekenLight(
             "Basic " + java.util.Base64.getEncoder().encodeToString("$username:$password".toByteArray(Charsets.UTF_8))
         else null
 
-    override val isConnected: Boolean get() = true // HTTP is per-request; nothing to hold open
+    // HTTP holds nothing open, and false stops a blind retry of a command the light may have obeyed.
+    override val isConnected: Boolean get() = false
 
     override fun read(): DriverReading {
         // Real OpenBeken reports live state via "Status 11" (nested under StatusSTS). "State" is empty.

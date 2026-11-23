@@ -12,10 +12,6 @@ import com.arva.shining.LightApp
 import com.arva.shining.lightApp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import java.time.Instant
-import java.time.ZoneId
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 
 /** Runs due automations, hands Wi-Fi arrivals to [Presence], and reschedules after boot/time changes. */
@@ -63,7 +59,7 @@ class AutomationReceiver : BroadcastReceiver() {
             }
             runCatching { app.controller.run(automation.command, automated = true) }
                 .onSuccess {
-                    store.setResult(id, "Ran ${stamp(scheduled)}")
+                    store.setResult(id, "Ran ${CatchUp.stamp(scheduled)}")
                     store.clearPendingUpTo(scheduled)
                 }
                 .onFailure { missed(app, automation, scheduled, reason(it)) }
@@ -79,11 +75,11 @@ class AutomationReceiver : BroadcastReceiver() {
     private suspend fun missed(app: LightApp, automation: Automation, scheduled: Long, why: String) {
         val store = app.automations
         if (!automation.catchUp) {
-            store.setResult(automation.id, "Skipped ${stamp(scheduled)}: $why")
+            store.setResult(automation.id, "Skipped ${CatchUp.stamp(scheduled)}: $why")
             return
         }
         store.setPending(automation.id, scheduled)
-        store.setResult(automation.id, "Missed ${stamp(scheduled)}. Runs when you get home")
+        store.setResult(automation.id, "Missed ${CatchUp.stamp(scheduled)}. Runs when you get home")
         Presence.check(app)
     }
 
@@ -94,9 +90,6 @@ class AutomationReceiver : BroadcastReceiver() {
         } else {
             intent.getParcelableExtra(ConnectivityManager.EXTRA_NETWORK)
         }
-
-    private fun stamp(millis: Long): String =
-        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEE HH:mm"))
 
     private fun reason(e: Throwable): String = when {
         e.message?.contains("reach", ignoreCase = true) == true ||

@@ -76,6 +76,7 @@ import com.arva.shining.findPreset
 import com.arva.shining.lightApp
 import com.arva.shining.R
 import com.arva.shining.automation.Automation
+import com.arva.shining.automation.CatchUp
 import com.arva.shining.automation.GeoPoint
 import com.arva.shining.automation.Scheduler
 import com.arva.shining.automation.SunTimes
@@ -87,7 +88,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.time.DayOfWeek
 import java.time.LocalTime
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
@@ -194,7 +194,7 @@ private fun AutomationCard(a: Automation, location: GeoPoint?, now: ZonedDateTim
         !a.enabled -> "Off"
         a.trigger is Trigger.Arrive -> "When the phone joins your Wi-Fi"
         a.trigger is Trigger.Sun && location == null -> "Needs your location"
-        next != null -> "Next: " + next.format(DateTimeFormatter.ofPattern("EEE HH:mm"))
+        next != null -> "Next: " + CatchUp.stamp(next.toInstant().toEpochMilli())
         else -> "No upcoming run"
     }
     val icon = when (a.trigger) {
@@ -450,6 +450,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
     var keepOff by rememberSaveable { mutableStateOf(cmd?.keepOff ?: false) }
     var catchUp by rememberSaveable { mutableStateOf(existing?.catchUp ?: true) }
     var picking by remember { mutableStateOf<String?>(null) } // "time" | "quiet"
+    var confirmingDelete by remember { mutableStateOf(false) }
 
     fun build(): Automation {
         val trigger = when (kind) {
@@ -472,12 +473,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
             title = if (existing == null) "New automation" else "Edit automation",
             navigation = { HeaderIcon(R.drawable.ic_arrow_left, "Back", onDone) },
         ) {
-            if (existing != null) HeaderIcon(R.drawable.ic_trash, "Delete") {
-                store.delete(existing.id)
-                Scheduler.cancel(context, existing.id)
-                Scheduler.rescheduleAll(context)
-                onDone()
-            }
+            if (existing != null) HeaderIcon(R.drawable.ic_trash, "Delete") { confirmingDelete = true }
         }
         Column(
             Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).navigationBarsPadding()
@@ -494,8 +490,8 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                             "When the phone joins your Wi-Fi and the light is off. Runs at most once every 30 minutes.",
                             style = MaterialTheme.typography.bodySmall, color = c.text2,
                         )
-                        SwitchRow("Only after dark", afterDark) { afterDark = it }
-                        SwitchRow("Quiet late at night", quietOn) { quietOn = it }
+                        ToggleRow("Only after dark", null, afterDark) { afterDark = it }
+                        ToggleRow("Quiet late at night", null, quietOn) { quietOn = it }
                         if (quietOn) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 GroupLabel("Not from")
@@ -507,16 +503,11 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                 }
                 DayToggles(days) { days = it }
                 if (kind != WhenKind.ARRIVE) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Catch up when I get home", style = MaterialTheme.typography.titleSmall, color = c.text)
-                            Text(
-                                "If it's missed while you're away, run it when you're back on your home Wi-Fi (up to 8 h later).",
-                                style = MaterialTheme.typography.bodySmall, color = c.text2,
-                            )
-                        }
-                        ArvaSwitch(catchUp, "Catch up when I get home") { catchUp = it }
-                    }
+                    ToggleRow(
+                        "Catch up when I get home",
+                        "If it's missed while you're away, run it when you're back on your home Wi-Fi (up to 8 h later, until 03:00).",
+                        catchUp,
+                    ) { catchUp = it }
                 }
             }
 
@@ -525,19 +516,13 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                 if (doKind == DoKind.PRESET) {
                     PresetChooser(preset) { preset = it }
                     val p = findPreset(preset)
-                    val colour = if (p?.temperature != null) whiteColor(p.temperature) else Color.hsv(p?.hue ?: 0f, p?.saturation ?: 1f, 1f)
+                    val colour = p?.swatch() ?: Color.hsv(0f, 1f, 1f)
                     ColorSlider(
                         "Brightness", brightness / 100f, "$brightness%",
                         { brightness = (it * 100).roundToInt().coerceIn(1, 100) },
                         Brush.horizontalGradient(listOf(if (c == ArvaDark) c.bg else c.text, colour)),
                     )
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Keep the light off", style = MaterialTheme.typography.titleSmall, color = c.text)
-                            Text("Set this look but leave the light off, so it's ready the next time you turn it on.", style = MaterialTheme.typography.bodySmall, color = c.text2)
-                        }
-                        ArvaSwitch(keepOff, "Keep the light off") { keepOff = it }
-                    }
+                    ToggleRow("Keep the light off", "Set this look but leave the light off, so it's ready the next time you turn it on.", keepOff) { keepOff = it }
                 }
             }
 
@@ -555,6 +540,20 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+
+    if (confirmingDelete && existing != null) {
+        ConfirmDialog(
+            title = "Delete this automation?",
+            confirm = "Delete",
+            onConfirm = {
+                store.delete(existing.id)
+                Scheduler.cancel(context, existing.id)
+                Scheduler.rescheduleAll(context)
+                onDone()
+            },
+            onDismiss = { confirmingDelete = false },
+        )
     }
 
     picking?.let { which ->
@@ -626,7 +625,7 @@ private fun PresetChooser(selected: String, onSelect: (String) -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { p ->
                     val on = p.label == selected
-                    val colour = if (p.temperature != null) whiteColor(p.temperature) else Color.hsv(p.hue ?: 0f, p.saturation, 1f)
+                    val colour = p.swatch()
                     Column(
                         Modifier.weight(1f).clip(RadiusControl).clickable(onClickLabel = "Choose ${p.label}") { onSelect(p.label) },
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -644,11 +643,16 @@ private fun PresetChooser(selected: String, onSelect: (String) -> Unit) {
     }
 }
 
+/** A labelled switch, with an optional line of explanation. */
 @Composable
-private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val c = Arva.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Arva.colors.text, modifier = Modifier.weight(1f))
-        ArvaSwitch(checked, label, onChange)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = c.text)
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.text2) }
+        }
+        ArvaSwitch(checked, title, onChange)
     }
 }
 

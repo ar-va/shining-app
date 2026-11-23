@@ -31,9 +31,12 @@ class CommandActivity : Activity() {
 class CommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION) return
-        val extras = intent.extras ?: return
-        val command = extras.getString("command")?.let { LightCommand.parse(it) }
-            ?: LightCommand.fromMap(KEYS.associateWith { @Suppress("DEPRECATION") extras.get(it)?.toString() })
+        // Any app can send this, so a malformed extra must not crash Shining.
+        val command = runCatching {
+            val extras = intent.extras ?: return
+            extras.getString("command")?.let { LightCommand.parse(it) }
+                ?: LightCommand.fromMap(KEYS.associateWith { @Suppress("DEPRECATION") extras.get(it)?.toString() })
+        }.getOrNull() ?: return
         val pending = goAsync()
         runCommand(context.applicationContext, command) { pending.finish() }
     }

@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Local network only: TCP 6668 to the light, UDP 6666/6667/7000 for discovery. -->
+    <!-- Local network: TCP 6668 or HTTP to the light, UDP 6666/6667/7000 for discovery. Internet: only the GitHub update check. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />

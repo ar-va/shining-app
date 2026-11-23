@@ -109,9 +109,6 @@ fun ColorSlider(
 private val HandleWidth = 16.dp
 private val HandleShape = RoundedCornerShape(6.dp)
 
-/** The hue track: the colours the strip can actually make. */
-val HueTrack = Brush.horizontalGradient((0..6).map { Color.hsv(it * 60f, 1f, 1f) })
-
 private val Warm = Color(0xFFFFB067)
 private val Neutral = Color(0xFFFFF1DE)
 private val Cool = Color(0xFFDCE8FF)

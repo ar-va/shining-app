@@ -58,12 +58,17 @@ data class SettingsState(
 }
 
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
-    private val _state = MutableStateFlow(
-        app.lightApp.store.load()?.let {
-            SettingsState(kind = it.kind, name = it.name, ip = it.ip, id = it.id, key = it.localKey, version = it.version, obUser = it.username, obPassword = it.password)
-        } ?: SettingsState()
-    )
+    private val _state = MutableStateFlow(saved())
     val state: StateFlow<SettingsState> = _state
+
+    private fun saved() = getApplication<Application>().lightApp.store.load()?.let {
+        SettingsState(kind = it.kind, name = it.name, ip = it.ip, id = it.id, key = it.localKey, version = it.version, obUser = it.username, obPassword = it.password)
+    } ?: SettingsState()
+
+    /** Drops unsaved edits, including a setup link the person backed out of. */
+    fun discard() {
+        _state.value = saved()
+    }
 
     fun edit(transform: (SettingsState) -> SettingsState) = _state.update { transform(it).copy(testResult = null, online = null) }
 
@@ -90,8 +95,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setKind(kind: LightKind) = edit { it.copy(kind = kind) }
 
     fun pasteLink(text: String?): Boolean {
-        val cfg = text?.let { DeviceConfig.fromSetupLink(it) } ?: return false
-        _state.update { it.copy(kind = cfg.kind, name = cfg.name, ip = cfg.ip, id = cfg.id, key = cfg.localKey, version = cfg.version) }
+        val cfg = text?.let { DeviceConfig.fromSetupLink(it) }?.takeIf { it.isComplete } ?: return false
+        // A link can name any address, so the saved password must not follow it to a new one.
+        _state.update {
+            it.copy(
+                kind = cfg.kind, name = cfg.name, ip = cfg.ip, id = cfg.id, key = cfg.localKey, version = cfg.version,
+                obPassword = if (cfg.ip == it.ip) it.obPassword else "", testResult = null, online = null,
+            )
+        }
         return true
     }
 

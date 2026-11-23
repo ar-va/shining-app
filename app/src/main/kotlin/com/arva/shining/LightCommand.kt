@@ -96,13 +96,14 @@ data class LightCommand(
         fun parse(query: String?): LightCommand {
             val q = query.orEmpty().removePrefix("?").split("&").mapNotNull {
                 val i = it.indexOf('=')
-                if (i <= 0) null else it.substring(0, i).lowercase() to URLDecoder.decode(it.substring(i + 1), "UTF-8")
+                if (i <= 0) null
+                else runCatching { it.substring(0, i).lowercase() to URLDecoder.decode(it.substring(i + 1), "UTF-8") }.getOrNull()
             }.toMap()
             return fromMap(q)
         }
 
         fun fromMap(values: Map<String, String?>): LightCommand {
-            fun int(key: String, range: IntRange) = values[key]?.trim()?.toFloatOrNull()?.roundToInt()?.coerceIn(range)
+            fun int(key: String, range: IntRange) = values[key]?.trim()?.toFloatOrNull()?.takeIf { it.isFinite() }?.roundToInt()?.coerceIn(range)
             return LightCommand(
                 power = when (values["power"]?.trim()?.lowercase()) {
                     "on", "true", "1" -> Power.ON

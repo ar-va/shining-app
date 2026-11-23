@@ -1,6 +1,6 @@
 # Shining
 
-A small Android app that controls a Tuya-based LED strip (sold as the Lenovo Smart LED Lightstrip and under many other brands) **directly over your Wi-Fi**: no cloud, no account, no ads, no telemetry.
+A small Android app that controls a Tuya-based LED strip (sold as the Lenovo Smart LED Lightstrip and under many other brands) **directly over your Wi-Fi**: no cloud, no account, no ads, no telemetry. The only internet request is a check for new versions on GitHub.
 
 It replaces the Smart Life app for day-to-day control:
 
@@ -14,7 +14,7 @@ It replaces the Smart Life app for day-to-day control:
 - One-tap presets
 - Finds the light on your network automatically
 
-The release APK is under 2 MB and needs no Google services. Design follows the [ARVA](https://ar-va.com) brand: Brygada 1918, IBM Plex Sans and Plex Mono, the ARVA palette in light and dark.
+The release APK is about 3 MB and needs no Google services. Design follows the [ARVA](https://ar-va.com) brand: Brygada 1918, IBM Plex Sans and Plex Mono, the ARVA palette in light and dark.
 
 ## How it works
 
@@ -45,14 +45,14 @@ The only thing the app can't discover by itself is the device's **local key**, a
 python3 tools/setup_qr.py
 ```
 
-Scan the QR code it prints with your phone camera and open it with Shining. Done.
+Scan the QR code it prints with your phone camera and open it with Shining, check the details and tap **Save**.
 
 Alternatively, open **Settings** in the app, tap **Scan Wi-Fi** to fill in the IP, device ID and version, then type the local key.
 
 ### 3. Install the app
 
-- Download `app-release.apk` from this repo's [Releases](../../releases) or the latest [Actions build](../../actions), or
-- Build it yourself: `./gradlew assembleRelease` → `app/build/outputs/apk/release/app-release.apk`
+- Download `Shining-<version>.apk` from this repo's [Releases](../../releases) or the latest [Actions build](../../actions), or
+- Build it yourself: `./gradlew assembleRelease` → `app/build/named-apk/Shining-<version>.apk`
 
 Releases are signed with a permanent key, so new versions install over old ones. (Builds without the key, such as forks, fall back to a debug key and need an uninstall first.)
 
@@ -86,7 +86,7 @@ One command format everywhere: `power=on|off|toggle`, `preset=<name>`, `brightne
 
 ### Google Home automations (work when you are away)
 
-The strip is still in Google Home through your Smart Life account, so Google Home can automate it from the cloud, even when your phone is off or away:
+On stock firmware, the strip is still in Google Home through your Smart Life account, so Google Home can automate it from the cloud, even when your phone is off or away:
 
 1. Google Home app → **Automations** → **+** → **Household**.
 2. **Add starter**: e.g. *Time of day* (sunrise/sunset), *Everyone leaves*, *Someone comes home*.
@@ -107,7 +107,7 @@ After flashing, the strip talks only to your LAN — no Tuya cloud, and no Googl
 
 ## Things to know
 
-- **Google Home keeps working.** It talks to the Tuya cloud through your Smart Life account, not through the app. You can uninstall the Smart Life app, but **don't delete the account** and **don't remove or re-pair the light**: re-pairing gives it a new local key, and you'd repeat step 1.
+- **Google Home keeps working on stock firmware** (not after flashing OpenBeken). It talks to the Tuya cloud through your Smart Life account, not through the app. You can uninstall the Smart Life app, but **don't delete the account** and **don't remove or re-pair the light**: re-pairing gives it a new local key, and you'd repeat step 1.
 - **Give the light a fixed IP** (a DHCP reservation in your router). If the IP changes, use **Settings → Scan Wi-Fi** to update it.
 - Tuya lights often allow **only one local connection** at a time. The app closes its connection after 20 s idle so it doesn't block anything else.
 - Phone and light must be on the same network. Guest Wi-Fi or "AP isolation" will block it.

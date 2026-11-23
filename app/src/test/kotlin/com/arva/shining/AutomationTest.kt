@@ -3,6 +3,7 @@ package com.arva.shining
 import com.arva.shining.automation.Automation
 import com.arva.shining.automation.CatchUp
 import com.arva.shining.automation.GeoPoint
+import com.arva.shining.automation.Presence
 import com.arva.shining.automation.SunTimes
 import com.arva.shining.automation.Trigger
 import com.arva.tuya.LightMode
@@ -19,6 +20,7 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
 class SunTimesTest {
@@ -100,25 +102,25 @@ class AutomationTest {
     private val late = Automation(id = "late", trigger = Trigger.Time(LocalTime.of(22, 30)), command = LightCommand.parse("preset=Orange&brightness=50"))
 
     @Test fun `catch up home before the second run applies the first`() {
-        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour), listOf(sunset, late), 22 * hour)
+        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour), listOf(sunset, late), 22 * hour, ZoneOffset.UTC)
         assertEquals(listOf("sunset"), plan.run.map { it.automation.id })
     }
 
     @Test fun `catch up applies only the newest look whatever the queue order`() {
-        val plan = CatchUp.plan(mapOf("late" to 22 * hour + hour / 2, "sunset" to 17 * hour), listOf(sunset, late), 23 * hour)
+        val plan = CatchUp.plan(mapOf("late" to 22 * hour + hour / 2, "sunset" to 17 * hour), listOf(sunset, late), 23 * hour, ZoneOffset.UTC)
         assertEquals(listOf("late"), plan.run.map { it.automation.id })
         assertEquals(listOf("sunset"), plan.replaced.map { it.automation.id })
     }
 
     @Test fun `catch up keeps a plain turn on after the look it follows`() {
         val on = Automation(id = "on", trigger = Trigger.Time(LocalTime.of(20, 0)), command = LightCommand(power = LightCommand.Power.ON))
-        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour, "on" to 20 * hour), listOf(sunset, on), 21 * hour)
+        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour, "on" to 20 * hour), listOf(sunset, on), 21 * hour, ZoneOffset.UTC)
         assertEquals(listOf("sunset", "on"), plan.run.map { it.automation.id })
     }
 
     @Test fun `catch up lets a later off win`() {
         val off = Automation(id = "off", trigger = Trigger.Time(LocalTime.of(21, 0)), command = LightCommand(power = LightCommand.Power.OFF))
-        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour, "off" to 21 * hour), listOf(sunset, off), 22 * hour)
+        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour, "off" to 21 * hour), listOf(sunset, off), 22 * hour, ZoneOffset.UTC)
         assertEquals(listOf("off"), plan.run.map { it.automation.id })
     }
 
@@ -127,10 +129,44 @@ class AutomationTest {
             mapOf("sunset" to 7 * hour, "late" to 20 * hour, "deleted" to 20 * hour),
             listOf(sunset, late.copy(enabled = false)),
             16 * hour,
+            ZoneOffset.UTC,
         )
         assertEquals(emptyList<CatchUp.Missed>(), plan.run)
         assertEquals(listOf("sunset"), plan.expired.map { it.automation.id })
         assertEquals(setOf("late", "deleted"), plan.gone.toSet())
+    }
+
+    @Test fun `a bedtime run stops at 03 00 the next morning`() {
+        val missed = mapOf("late" to 22 * hour + hour / 2)
+        assertEquals(listOf("late"), CatchUp.plan(missed, listOf(late), 26 * hour, ZoneOffset.UTC).run.map { it.automation.id })
+        val dawn = CatchUp.plan(missed, listOf(late), 30 * hour, ZoneOffset.UTC)
+        assertEquals(emptyList<CatchUp.Missed>(), dawn.run)
+        assertEquals(listOf("late"), dawn.expired.map { it.automation.id })
+    }
+
+    @Test fun `only a real trip counts as arriving`() {
+        val minute = 60_000L
+        val now = 100 * hour
+        assertTrue(Presence.isArrival(Presence.State.AWAY, "home-1", "home-2", now - 20 * minute, now))
+        assertFalse(Presence.isArrival(Presence.State.AWAY, "home-1", "home-2", now - 9_000, now))
+        assertFalse(Presence.isArrival(Presence.State.AWAY, null, "home-2", now - 9_000, now)) // after a restart
+        assertFalse(Presence.isArrival(Presence.State.AWAY, "home-1", "home-1", now - 60 * minute, now))
+        assertFalse(Presence.isArrival(Presence.State.HOME, "home-1", "home-2", now - 60 * minute, now))
+    }
+
+    @Test fun `a preset an automation needs cannot go away`() {
+        val mine = Preset("Sunset pink", hue = 340f)
+        val uses = Automation(id = "a", trigger = Trigger.Time(LocalTime.NOON), command = LightCommand(preset = "sunset PINK"))
+        assertEquals(listOf("a"), automationsUsing(listOf(mine), listOf(uses)).map { it.id })
+        val builtIn = uses.copy(command = LightCommand(preset = "Orange"))
+        assertEquals(emptyList<Automation>(), automationsUsing(listOf(Preset("Orange", hue = 25f)), listOf(builtIn)))
+        assertEquals("Orange 2", freePresetName("Orange"))
+        assertEquals("Mauve", freePresetName("Mauve"))
+    }
+
+    @Test fun `presets survive being saved`() {
+        val list = listOf(Preset("Sunset pink", hue = 340f, saturation = 0.7f), Preset("Soft white", temperature = 0.4f))
+        assertEquals(list, presetsFromJson(presetsToJson(list)))
     }
 
     @Test fun `json round trip`() {
@@ -162,6 +198,11 @@ class LightCommandTest {
         assertEquals(c, LightCommand.parse(c.toQuery()))
         assertEquals(100, LightCommand.parse("brightness=250").brightness)
         assertTrue(LightCommand.parse("").isEmpty)
+    }
+
+    @Test fun `malformed input is ignored, not a crash`() {
+        assertEquals(LightCommand(hue = 10), LightCommand.parse("preset=%ZZ&brightness=NaN&saturation=Infinity&hue=10").copy(saturation = null))
+        assertTrue(LightCommand.parse("preset=%ZZ").isEmpty)
     }
 
     @Test fun `keep off applies colour but switches off`() {

@@ -44,6 +44,10 @@ object NetworkFingerprint {
         return listOf(subnet, gateway.orEmpty(), domains.orEmpty().trim().lowercase()).joinToString("|")
     }
 
+    /** The password rule: only the recorded home, unless this call is allowed to record one. */
+    fun maySendPassword(print: String?, home: String?, trust: PasswordTrust): Boolean = print != null &&
+        (print == home || trust == PasswordTrust.CONFIRM || (trust == PasswordTrust.FIRST_USE && home == null))
+
     /** The network address of [address] with [prefixLength] bits, as "192.168.1.0/24". */
     fun subnet(address: ByteArray, prefixLength: Int): String {
         val masked = address.copyOf()
@@ -61,13 +65,9 @@ class HomeNetworkGuard(context: Context, private val store: ConfigStore) : Passw
     override fun route(requested: Network?, trust: PasswordTrust): LightRoute {
         val home = store.homeNetwork
         val candidates = if (requested != null) listOf(requested) else wifiNetworks()
-        val prints = candidates.map { it to fingerprint(it) }
-        prints.firstOrNull { (_, print) -> print != null && print == home }?.let { (network, _) ->
-            return LightRoute(network, maySendPassword = true)
-        }
-        val wifi = prints.firstOrNull { (_, print) -> print != null }?.first
-        val mayLearn = trust == PasswordTrust.CONFIRM || (trust == PasswordTrust.FIRST_USE && home == null)
-        return LightRoute(requested ?: wifi, maySendPassword = wifi != null && mayLearn)
+        val prints = candidates.mapNotNull { network -> fingerprint(network)?.let { network to it } }
+        val best = prints.firstOrNull { it.second == home } ?: prints.firstOrNull()
+        return LightRoute(requested ?: best?.first, NetworkFingerprint.maySendPassword(best?.second, home, trust))
     }
 
     override fun accepted(network: Network?, trust: PasswordTrust) {

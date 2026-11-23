@@ -95,7 +95,6 @@ val PlexSans = FontFamily(
 
 val PlexMono = FontFamily(
     Font(R.font.ibm_plex_mono_regular, FontWeight.Normal),
-    Font(R.font.ibm_plex_mono_medium, FontWeight.Medium),
 )
 
 private val ArvaType = Typography(

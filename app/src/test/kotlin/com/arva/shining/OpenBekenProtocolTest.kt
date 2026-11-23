@@ -2,6 +2,7 @@ package com.arva.shining
 
 import com.arva.shining.light.OpenBekenProtocol
 import com.arva.tuya.DeviceConfig
+import com.arva.tuya.Hsv
 import com.arva.tuya.LightKind
 import com.arva.tuya.LightMode
 import com.arva.tuya.LightState
@@ -86,6 +87,14 @@ class OpenBekenProtocolTest {
         assertEquals(0.82f, s.colour!!.s, 0.01f)
         // In colour mode brightness comes from HSBColor's value (62), NOT the master Dimmer (100).
         assertEquals(0.62f, s.brightness, 0.01f)
+    }
+
+    @Test fun `brightness alone in colour mode goes through HSBColor`() {
+        val orange = LightState(on = true, mode = LightMode.COLOUR, brightness = 0.5f, temperature = null, colour = Hsv(25f, 1f, 0.5f))
+        assertEquals(
+            listOf("led_enableAll 1", "HSBColor 25,100,80"),
+            OpenBekenProtocol.commandsFor(LightCommand(brightness = 80), orange),
+        )
     }
 
     @Test fun `colour brightness ignores a master Dimmer stuck at 100`() {

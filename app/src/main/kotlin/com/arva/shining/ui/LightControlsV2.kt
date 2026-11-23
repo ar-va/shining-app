@@ -17,6 +17,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -58,6 +59,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +72,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
@@ -169,6 +176,14 @@ fun BrightnessCapsule(
                 Modifier
                     .width(capsuleWidth)
                     .fillMaxHeight()
+                    .arvaFocus(shape)
+                    .onKeyEvent { e ->
+                        val activate = e.type == KeyEventType.KeyUp &&
+                            e.key in setOf(Key.Enter, Key.NumPadEnter, Key.DirectionCenter, Key.Spacebar)
+                        if (activate) toggle()
+                        activate
+                    }
+                    .focusable()
                     .clip(shape)
                     .background(track)
                     .border(1.dp, c.line, shape)
@@ -186,6 +201,7 @@ fun BrightnessCapsule(
                         stateDescription = if (s.on) "On, $pct%" else "Off"
                         progressBarRangeInfo = ProgressBarRangeInfo(s.brightness, 0f..1f)
                         setProgress { onBrightness(it.coerceIn(0f, 1f)); true }
+                        onClick(label = if (s.on) "Turn off" else "Turn on") { toggle(); true }
                     },
                 contentAlignment = Alignment.BottomCenter,
             ) {

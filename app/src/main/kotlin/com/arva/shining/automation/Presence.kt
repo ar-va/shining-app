@@ -21,10 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.time.Instant
-import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * Home/away tracking for "arriving home" automations.
@@ -43,6 +40,7 @@ object Presence {
     private const val JOB_PERIODIC = 4101
     private const val JOB_NOW = 4102
     private const val ARRIVAL_COOLDOWN_MS = 30 * 60_000L
+    private const val MIN_AWAY_MS = 20 * 60_000L
     private const val TAG = "Shining"
 
     /** Starts or stops tracking, depending on whether any arrival automation is enabled. */
@@ -80,7 +78,7 @@ object Presence {
     /** HOME if on Wi-Fi and the light answers, otherwise AWAY (and arm the listener). */
     suspend fun check(app: LightApp, trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK): Unit = lock.withLock {
         val store = app.automations
-        val wifi = currentWifi(app)
+        val wifi = app.homeNetwork.route(null, PasswordTrust.KNOWN_NETWORK).network
         Log.i(TAG, "check: wifi=$wifi presence=${store.presence} home=${store.homeNetwork}")
         if (wifi != null) {
             // Same connection we already know is home, nothing queued: no traffic to the light.
@@ -92,6 +90,7 @@ object Presence {
                 return@withLock
             }
         }
+        if (store.presence != State.AWAY) store.awaySince = System.currentTimeMillis()
         store.presence = State.AWAY
         armWifiListener(app)
         Log.i(TAG, "check: away, Wi-Fi listener armed")
@@ -113,25 +112,31 @@ object Presence {
 
     /**
      * The light answered on [network]. Queued runs always go now. Arrival automations need a real
-     * return: away, on a new connection (network ids change on reconnect), so a blip at home or a
-     * light that was briefly unplugged doesn't count as coming home.
+     * return (see [isArrival]), so a Wi-Fi drop, a restart or a briefly unplugged light doesn't count.
      */
     private suspend fun onHome(app: LightApp, network: Network, snapshot: LightController.Snapshot) {
         val store = app.automations
-        val arrived = store.presence == State.AWAY && store.homeNetwork != network.toString()
+        val arrived = isArrival(store.presence, store.homeNetwork, network.toString(), store.awaySince, System.currentTimeMillis())
         store.presence = State.HOME
         store.homeNetwork = network.toString()
         Log.i(TAG, "home on $network, arrived=$arrived")
-        runCatchUp(app, network)
-        if (arrived) runArrivals(app, snapshot, network)
+        val ran = runCatchUp(app, network)
+        if (arrived) {
+            // Catch-up may have switched the light on, and arrivals only run on a light that is off.
+            runArrivals(app, if (ran) reach(app, network, listOf(0L)) ?: snapshot else snapshot, network)
+        }
     }
 
-    /** Applies runs missed while away. One that fails stays queued for the next attempt. */
-    private suspend fun runCatchUp(app: LightApp, network: Network) {
+    /** Away long enough to be a real trip, and back on a new connection (network ids change on reconnect). */
+    fun isArrival(state: State, homeNetwork: String?, network: String, awaySince: Long, now: Long): Boolean =
+        state == State.AWAY && homeNetwork != network && now - awaySince >= MIN_AWAY_MS
+
+    /** Applies runs missed while away, true if any ran. One that fails stays queued for the next attempt. */
+    private suspend fun runCatchUp(app: LightApp, network: Network): Boolean {
         val store = app.automations
         val now = System.currentTimeMillis()
         val pending = store.pendingCatchUp()
-        if (pending.isEmpty()) return
+        if (pending.isEmpty()) return false
         val plan = CatchUp.plan(pending, store.items.value, now)
         Log.i(TAG, "catch-up: run=${plan.run.size} replaced=${plan.replaced.size} expired=${plan.expired.size}")
         plan.gone.forEach(store::clearPending)
@@ -143,16 +148,19 @@ object Presence {
             store.clearPending(it.automation.id)
             store.setResult(it.automation.id, "Missed ${CatchUp.stamp(it.scheduled)}. A later automation took over")
         }
+        var ran = false
         for (m in plan.run) {
             val id = m.automation.id
             val ok = runCatching { app.controller.run(m.automation.command, network, automated = true) }.isSuccess
             if (!ok) {
                 Log.i(TAG, "catch-up: $id failed, kept for the next attempt")
-                return
+                return ran
             }
+            ran = true
             store.clearPending(id)
             store.setResult(id, "Ran ${CatchUp.stamp(now)}, caught up from ${CatchUp.stamp(m.scheduled)}")
         }
+        return ran
     }
 
     private suspend fun runArrivals(app: LightApp, snapshot: LightController.Snapshot, network: Network) {
@@ -166,7 +174,7 @@ object Presence {
         Log.i(TAG, "arrival: ${candidates.size} automation(s) allowed now")
         if (candidates.isEmpty()) return
         store.lastArrivalMillis = now
-        val stamp = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEE HH:mm"))
+        val stamp = CatchUp.stamp(now)
         for (a in candidates) {
             if (snapshot.state?.on == true) {
                 store.setResult(a.id, "Skipped $stamp: light was already on")
@@ -192,13 +200,6 @@ object Presence {
                 .getOrNull()?.let { return it }
         }
         return null
-    }
-
-    private fun currentWifi(context: Context): Network? {
-        val cm = context.getSystemService(ConnectivityManager::class.java)
-        val active = cm.activeNetwork ?: return null
-        val caps = cm.getNetworkCapabilities(active) ?: return null
-        return if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) active else null
     }
 
     private fun armWifiListener(context: Context) {

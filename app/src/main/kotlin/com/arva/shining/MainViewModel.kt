@@ -156,16 +156,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         sendCurrentMode()
     }
 
-    fun setHue(h: Float) {
-        _state.update { it.copy(hue = h, colourMode = true, on = true) }
-        sendCurrentMode()
-    }
-
-    fun setSaturation(s: Float) {
-        _state.update { it.copy(saturation = s, colourMode = true, on = true) }
-        sendCurrentMode()
-    }
-
     /** Hue and saturation together, from the 2-D colour wheel. */
     fun setHsv(h: Float, s: Float) {
         _state.update { it.copy(hue = h, saturation = s, colourMode = true, on = true) }

@@ -1,5 +1,9 @@
 package com.arva.shining.ui
 
+import android.widget.Toast
+import com.arva.shining.automationsUsing
+import com.arva.shining.findPreset
+import com.arva.shining.freePresetName
 import com.arva.shining.lightApp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.TextButton
@@ -303,7 +307,11 @@ private fun PresetsRow(s: UiState, vm: MainViewModel, onOpenPicker: () -> Unit) 
             PresetDot(
                 p,
                 onClick = { view.hapticSelect(); vm.applyPreset(p) },
-                onLongClick = { view.hapticTick(); removing = idx },
+                onLongClick = {
+                    view.hapticTick()
+                    if (automationsUsing(listOf(p), context.lightApp.automations.items.value).isEmpty()) removing = idx
+                    else Toast.makeText(context, "An automation uses ${p.label}. Change it first.", Toast.LENGTH_LONG).show()
+                },
             )
         }
         AddDot { view.hapticSelect(); adding = true }
@@ -311,7 +319,7 @@ private fun PresetsRow(s: UiState, vm: MainViewModel, onOpenPicker: () -> Unit) 
 
     if (adding) {
         AddPresetDialog(
-            defaultName = if (s.colourMode) colourName(s.hue) else warmthName(s.temperature),
+            defaultName = freePresetName(if (s.colourMode) colourName(s.hue) else warmthName(s.temperature)),
             onDismiss = { adding = false },
             onSave = { name ->
                 val preset = if (s.colourMode) Preset(name, hue = s.hue, saturation = s.saturation)
@@ -366,7 +374,7 @@ private fun StatusChip(s: UiState, onRetry: () -> Unit) {
 @Composable
 private fun PresetDot(p: Preset, onClick: () -> Unit, onLongClick: () -> Unit) {
     val c = Arva.colors
-    val colour = if (p.temperature != null) whiteColor(p.temperature) else Color.hsv(p.hue ?: 0f, p.saturation, 1f)
+    val colour = p.swatch()
     Box(
         Modifier
             .size(DotSize)
@@ -418,6 +426,7 @@ private fun AddDot(onClick: () -> Unit) {
 private fun AddPresetDialog(defaultName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     val c = Arva.colors
     var name by remember { mutableStateOf(defaultName) }
+    val taken = findPreset(name) != null
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.surface,
@@ -426,17 +435,17 @@ private fun AddPresetDialog(defaultName: String, onDismiss: () -> Unit, onSave: 
         modifier = Modifier.border(1.dp, c.line, RadiusCard),
         title = { Text("Save preset", style = MaterialTheme.typography.titleLarge, color = c.text) },
         text = {
-            ArvaField(name, { name = it }, "Name")
+            ArvaField(name, { name = it }, "Name", isError = taken, supporting = if (taken) "That name is already used" else null)
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim()) }) { Text("Save", style = MaterialTheme.typography.labelLarge, color = c.kikyo) }
+            TextButton(onClick = { if (name.isNotBlank() && !taken) onSave(name.trim()) }) { Text("Save", style = MaterialTheme.typography.labelLarge, color = c.kikyo) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = MaterialTheme.typography.labelLarge, color = c.text2) } },
     )
 }
 
 @Composable
-private fun ConfirmDialog(title: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+fun ConfirmDialog(title: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val c = Arva.colors
     AlertDialog(
         onDismissRequest = onDismiss,

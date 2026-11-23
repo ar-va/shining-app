@@ -89,6 +89,11 @@ class AutomationStore(context: Context) {
         get() = runCatching { Presence.State.valueOf(prefs.getString("presence", null)!!) }.getOrDefault(Presence.State.UNKNOWN)
         set(value) = prefs.edit { putString("presence", value.name) }
 
+    /** When the phone last went from home to away. */
+    var awaySince: Long
+        get() = prefs.getLong("awaySince", 0L)
+        set(value) = prefs.edit { putLong("awaySince", value) }
+
     /** The Wi-Fi connection (Network id) on which the light was last reachable. */
     var homeNetwork: String?
         get() = prefs.getString("homeNetwork", null)

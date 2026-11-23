@@ -16,6 +16,7 @@ import com.arva.shining.lightApp
 import kotlinx.coroutines.launch
 import com.arva.shining.ThemeMode
 import com.arva.shining.Updater
+import com.arva.shining.automationsUsing
 import androidx.compose.runtime.collectAsState
 import android.os.Build
 import android.widget.Toast
@@ -348,8 +349,13 @@ private fun PresetsCard() {
             style = MaterialTheme.typography.bodySmall, color = c.text2,
         )
         SecondaryButton("Reset to default", onClick = {
-            context.lightApp.presetStore.resetToDefault()
-            Toast.makeText(context, "Presets reset", Toast.LENGTH_SHORT).show()
+            val app = context.lightApp
+            if (automationsUsing(app.presetStore.items.value, app.automations.items.value).isEmpty()) {
+                app.presetStore.resetToDefault()
+                Toast.makeText(context, "Presets reset", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "An automation uses one of your presets. Change it first.", Toast.LENGTH_LONG).show()
+            }
         })
     }
 }
@@ -368,19 +374,6 @@ private fun AmbientCard() {
     }
 }
 
-/** A titled switch row used in the settings cards. */
-@Composable
-private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    val c = Arva.colors
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = c.text)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = c.text2)
-        }
-        ArvaSwitch(checked, title, onChange)
-    }
-}
-
 /** Theme mode (System/Light/Dark) and Material You — applies live. */
 @Composable
 private fun AppearanceCard() {
@@ -395,13 +388,7 @@ private fun AppearanceCard() {
             mode, store::setMode,
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Material You", style = MaterialTheme.typography.titleSmall, color = c.text)
-                    Text("Use colours from your wallpaper.", style = MaterialTheme.typography.bodySmall, color = c.text2)
-                }
-                ArvaSwitch(dynamic, "Material You", store::setDynamic)
-            }
+            ToggleRow("Material You", "Use colours from your wallpaper.", dynamic, store::setDynamic)
         }
     }
 }

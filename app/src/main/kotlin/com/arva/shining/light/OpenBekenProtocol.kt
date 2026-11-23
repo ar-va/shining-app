@@ -9,10 +9,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.roundToInt
 
 /**
@@ -55,7 +52,9 @@ object OpenBekenProtocol {
                 out += "CT ${warmthToCt(warmth / 100f)}"
                 out += "Dimmer $b"
             }
-            command.brightness != null -> out += "Dimmer $b" // brightness only: keep current mode
+            // Brightness only, keeping the mode. Colour brightness lives in HSBColor, not the master Dimmer.
+            command.brightness != null -> out += current?.colour?.takeIf { current.mode == LightMode.COLOUR }
+                ?.let { "HSBColor ${it.h.roundToInt()},${(it.s * 100).roundToInt()},$b" } ?: "Dimmer $b"
             // plain "on": nothing more to send
         }
         // Ensure it ends up off after storing the look.
@@ -108,9 +107,4 @@ object OpenBekenProtocol {
             colour = if (white) null else Hsv(hue.coerceIn(0f, 360f), sat.coerceIn(0f, 1f), brightness),
         )
     }
-
-    /** Pulls a value out of OpenBeken's per-command JSON ack, which echoes e.g. {"Dimmer":50}. Unused but handy. */
-    @Suppress("unused")
-    fun ackValue(json: String, key: String): Double? =
-        runCatching { (Json.parseToJsonElement(json).jsonObject[key]?.jsonPrimitive)?.doubleOrNull }.getOrNull()
 }

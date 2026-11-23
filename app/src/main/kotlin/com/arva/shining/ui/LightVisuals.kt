@@ -2,11 +2,15 @@ package com.arva.shining.ui
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import com.arva.shining.Preset
 import com.arva.shining.UiState
 
 /** The colour the light is currently showing, for previews and the capsule. */
 fun lightColourOf(s: UiState): Color =
     if (s.colourMode) Color.hsv(s.hue, s.saturation, 1f) else whiteColor(s.temperature)
+
+/** A preset's real colour, for its swatch. */
+fun Preset.swatch(): Color = if (temperature != null) whiteColor(temperature) else Color.hsv(hue ?: 0f, saturation, 1f)
 
 /** Readable icon colour on top of [fill]: Ink or Paper, never pure black or white. */
 fun onColourOf(fill: Color): Color =

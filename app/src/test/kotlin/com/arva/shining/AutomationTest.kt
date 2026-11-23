@@ -1,6 +1,7 @@
 package com.arva.shining
 
 import com.arva.shining.automation.Automation
+import com.arva.shining.automation.CatchUp
 import com.arva.shining.automation.GeoPoint
 import com.arva.shining.automation.SunTimes
 import com.arva.shining.automation.Trigger
@@ -91,6 +92,45 @@ class AutomationTest {
         val early = a.copy(trigger = Trigger.Arrive(afterDark = false, notAfter = LocalTime.of(1, 0)))
         assertTrue(early.arrivalAllowed(now.withHour(23), loc))
         assertFalse(early.arrivalAllowed(now.withHour(2), loc))
+    }
+
+    // Sunday, as in the user's report: sunset orange at 100%, then orange at 50% at 22:30.
+    private val hour = 3_600_000L
+    private val sunset = Automation(id = "sunset", trigger = Trigger.Sun(SunTimes.Event.SUNSET, 0), command = LightCommand.parse("preset=Orange&brightness=100"))
+    private val late = Automation(id = "late", trigger = Trigger.Time(LocalTime.of(22, 30)), command = LightCommand.parse("preset=Orange&brightness=50"))
+
+    @Test fun `catch up home before the second run applies the first`() {
+        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour), listOf(sunset, late), 22 * hour)
+        assertEquals(listOf("sunset"), plan.run.map { it.automation.id })
+    }
+
+    @Test fun `catch up applies only the newest look whatever the queue order`() {
+        val plan = CatchUp.plan(mapOf("late" to 22 * hour + hour / 2, "sunset" to 17 * hour), listOf(sunset, late), 23 * hour)
+        assertEquals(listOf("late"), plan.run.map { it.automation.id })
+        assertEquals(listOf("sunset"), plan.replaced.map { it.automation.id })
+    }
+
+    @Test fun `catch up keeps a plain turn on after the look it follows`() {
+        val on = Automation(id = "on", trigger = Trigger.Time(LocalTime.of(20, 0)), command = LightCommand(power = LightCommand.Power.ON))
+        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour, "on" to 20 * hour), listOf(sunset, on), 21 * hour)
+        assertEquals(listOf("sunset", "on"), plan.run.map { it.automation.id })
+    }
+
+    @Test fun `catch up lets a later off win`() {
+        val off = Automation(id = "off", trigger = Trigger.Time(LocalTime.of(21, 0)), command = LightCommand(power = LightCommand.Power.OFF))
+        val plan = CatchUp.plan(mapOf("sunset" to 17 * hour, "off" to 21 * hour), listOf(sunset, off), 22 * hour)
+        assertEquals(listOf("off"), plan.run.map { it.automation.id })
+    }
+
+    @Test fun `catch up drops old, disabled and deleted runs`() {
+        val plan = CatchUp.plan(
+            mapOf("sunset" to 7 * hour, "late" to 20 * hour, "deleted" to 20 * hour),
+            listOf(sunset, late.copy(enabled = false)),
+            16 * hour,
+        )
+        assertEquals(emptyList<CatchUp.Missed>(), plan.run)
+        assertEquals(listOf("sunset"), plan.expired.map { it.automation.id })
+        assertEquals(setOf("late", "deleted"), plan.gone.toSet())
     }
 
     @Test fun `json round trip`() {

@@ -26,7 +26,7 @@ import java.io.IOException
 
 class LightApp : Application() {
     val store by lazy { ConfigStore(this) }
-    val controller by lazy { LightController(store) }
+    val controller by lazy { LightController(store) { automations.dropPendingAfterManualChange() } }
     val automations by lazy { com.arva.shining.automation.AutomationStore(this) }
     val themeStore by lazy { ThemeStore(this) }
     val presetStore by lazy { PresetStore(this) }
@@ -119,7 +119,7 @@ data class CachedLightState(
  * Single owner of the connection to the light. Serializes calls, reuses a Tuya socket while in use
  * and closes it after 20 s idle (Tuya lights allow one local client; OpenBeken is stateless HTTP).
  */
-class LightController(private val store: ConfigStore) {
+class LightController(private val store: ConfigStore, private val onManualCommand: () -> Unit = {}) {
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var driver: LightDriver? = null
@@ -133,15 +133,18 @@ class LightController(private val store: ConfigStore) {
     /**
      * Runs a [LightCommand], reading the light first when the command depends on its current state.
      * [network] pins the connection to one Wi-Fi network (used right after Wi-Fi connects).
-     * Returns the state read before the command, if one was read.
+     * [automated] marks runs from automations; anything else is a person's choice and cancels queued
+     * catch-ups. Returns the state read before the command, if one was read.
      */
-    suspend fun run(command: LightCommand, network: Network? = null): Snapshot? {
+    suspend fun run(command: LightCommand, network: Network? = null, automated: Boolean = false): Snapshot? {
         if (command.isEmpty) return null
-        return withDriver(network) { driver ->
-            val before = if (command.needsState) driver.read().toSnapshot() else null
-            driver.apply(command, before?.state)
-            before
+        val before = withDriver(network) { driver ->
+            val state = if (command.needsState) driver.read().toSnapshot() else null
+            driver.apply(command, state?.state)
+            state
         }
+        if (!automated) onManualCommand()
+        return before
     }
 
     fun reset() {

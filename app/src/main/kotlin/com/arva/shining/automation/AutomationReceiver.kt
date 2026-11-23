@@ -58,19 +58,33 @@ class AutomationReceiver : BroadcastReceiver() {
             if (automation == null) return
             // A long-overdue alarm (phone was off) would switch the light at an odd time: skip it.
             if (abs(System.currentTimeMillis() - scheduled) > STALE_MS) {
-                store.setResult(id, "Skipped ${stamp(scheduled)}: phone was off or asleep")
-                if (automation.catchUp) store.setPending(id, scheduled) // run it when back home, if recent enough
+                missed(app, automation, scheduled, "phone was off or asleep")
                 return
             }
-            runCatching { app.controller.run(automation.command) }
-                .onSuccess { store.setResult(id, "Ran ${stamp(scheduled)}"); store.clearPending(id) }
-                .onFailure {
-                    store.setResult(id, "Skipped ${stamp(scheduled)}: ${reason(it)}")
-                    if (automation.catchUp) store.setPending(id, scheduled) // away → catch up on arrival home
+            runCatching { app.controller.run(automation.command, automated = true) }
+                .onSuccess {
+                    store.setResult(id, "Ran ${stamp(scheduled)}")
+                    store.clearPendingUpTo(scheduled)
                 }
+                .onFailure { missed(app, automation, scheduled, reason(it)) }
         } finally {
             Scheduler.rescheduleAll(app)
         }
+    }
+
+    /**
+     * Queues a missed run. The check right after it matters: it marks the phone away and arms the
+     * Wi-Fi listener now, rather than whenever the next periodic check happens to run.
+     */
+    private suspend fun missed(app: LightApp, automation: Automation, scheduled: Long, why: String) {
+        val store = app.automations
+        if (!automation.catchUp) {
+            store.setResult(automation.id, "Skipped ${stamp(scheduled)}: $why")
+            return
+        }
+        store.setPending(automation.id, scheduled)
+        store.setResult(automation.id, "Missed ${stamp(scheduled)}. Runs when you get home")
+        Presence.check(app)
     }
 
     @Suppress("DEPRECATION")

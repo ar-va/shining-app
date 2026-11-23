@@ -45,6 +45,20 @@ class AutomationStore(context: Context) {
 
     fun clearPending(id: String) = prefs.edit { remove("pending.$id") }
 
+    /** A later run reached the light, so anything missed before it no longer matters. */
+    fun clearPendingUpTo(scheduledMillis: Long) {
+        val done = pendingCatchUp().filterValues { it <= scheduledMillis }.keys
+        if (done.isNotEmpty()) prefs.edit { done.forEach { remove("pending.$it") } }
+    }
+
+    /** The person set the light by hand: their choice beats anything still queued. */
+    fun dropPendingAfterManualChange() {
+        pendingCatchUp().forEach { (id, at) ->
+            clearPending(id)
+            setResult(id, "Missed ${CatchUp.stamp(at)}. You set the light yourself")
+        }
+    }
+
     private fun write(list: List<Automation>) {
         prefs.edit { putString(KEY_LIST, Automation.listToJson(list)) }
         _items.value = list

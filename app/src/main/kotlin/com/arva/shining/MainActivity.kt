@@ -12,7 +12,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.arva.shining.automation.Presence
+import kotlinx.coroutines.launch
 import com.arva.shining.ui.ShiningTheme
 import com.arva.shining.ui.AutomationEditor
 import com.arva.shining.ui.AutomationsScreen
@@ -80,6 +83,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         main.refresh()
+        // Back at home with something queued: run it now, then show the result.
+        lifecycleScope.launch {
+            runCatching { Presence.onAppOpened(lightApp) }
+            main.refresh(showLoading = false)
+        }
     }
 
     private fun handleSetupLink(intent: Intent?) {

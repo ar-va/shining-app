@@ -18,6 +18,8 @@ import com.arva.shining.LightController
 import com.arva.shining.lightApp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -31,7 +33,8 @@ import java.time.format.DateTimeFormatter
  *  - a check every ~15 min decides HOME (on Wi-Fi and the light answers) or AWAY;
  *  - only while AWAY is the one-shot Wi-Fi listener armed;
  *  - when it fires and the light answers on that Wi-Fi, that is an arrival.
- * While HOME nothing is armed, so Wi-Fi blips at home never count as arriving.
+ * While HOME nothing is armed, so Wi-Fi blips at home never count as arriving. Whichever of these
+ * first reaches the light (listener, periodic check, a failed alarm, opening the app) runs the queue.
  */
 object Presence {
     enum class State { UNKNOWN, HOME, AWAY }
@@ -39,7 +42,6 @@ object Presence {
     private const val JOB_PERIODIC = 4101
     private const val JOB_NOW = 4102
     private const val ARRIVAL_COOLDOWN_MS = 30 * 60_000L
-    private const val CATCHUP_WINDOW_MS = 8 * 60 * 60_000L // don't catch up a run missed more than 8 h ago
     private const val TAG = "Shining"
 
     /** Starts or stops tracking, depending on whether any arrival automation is enabled. */
@@ -65,19 +67,28 @@ object Presence {
         store.homeNetwork = null
     }
 
-    /** Periodic check: HOME if on Wi-Fi and the light answers, otherwise AWAY (and arm the listener). */
-    suspend fun check(app: LightApp) {
+    /** Every way of noticing home goes through here, one at a time, so nothing runs twice. */
+    private val lock = Mutex()
+
+    /** The app came to the front: if it can reach the light, anything queued runs now. */
+    suspend fun onAppOpened(app: LightApp) {
+        val tracking = app.automations.items.value.any { it.enabled && (it.trigger is Trigger.Arrive || it.catchUp) }
+        if (tracking) check(app)
+    }
+
+    /** HOME if on Wi-Fi and the light answers, otherwise AWAY (and arm the listener). */
+    suspend fun check(app: LightApp): Unit = lock.withLock {
         val store = app.automations
         val wifi = currentWifi(app)
         Log.i(TAG, "check: wifi=$wifi presence=${store.presence} home=${store.homeNetwork}")
         if (wifi != null) {
-            // Same connection we already know is home: nothing to do (and no traffic to the light).
-            if (store.presence == State.HOME && store.homeNetwork == wifi.toString()) return
-            if (reach(app, wifi, waits = listOf(0L)) != null) {
-                store.presence = State.HOME
-                store.homeNetwork = wifi.toString()
-                Log.i(TAG, "check: home on $wifi")
-                return
+            // Same connection we already know is home, nothing queued: no traffic to the light.
+            val settled = store.presence == State.HOME && store.homeNetwork == wifi.toString()
+            if (settled && store.pendingCatchUp().isEmpty()) return@withLock
+            val snapshot = reach(app, wifi, waits = listOf(0L))
+            if (snapshot != null) {
+                onHome(app, wifi, snapshot)
+                return@withLock
             }
         }
         store.presence = State.AWAY
@@ -86,47 +97,62 @@ object Presence {
     }
 
     /** The one-shot listener fired: a Wi-Fi network became available. */
-    suspend fun onWifiAvailable(app: LightApp, network: Network) {
+    suspend fun onWifiAvailable(app: LightApp, network: Network): Unit = lock.withLock {
         val store = app.automations
         Log.i(TAG, "wifi available: $network presence=${store.presence} home=${store.homeNetwork}")
-        if (store.presence == State.HOME && store.homeNetwork == network.toString()) return
+        val settled = store.presence == State.HOME && store.homeNetwork == network.toString()
+        if (settled && store.pendingCatchUp().isEmpty()) return@withLock
         val snapshot = reach(app, network, waits = listOf(2_000L, 5_000L, 8_000L))
         if (snapshot == null) {
             Log.i(TAG, "wifi available: light not reachable on $network, not home")
-            return // another Wi-Fi (or the light is unplugged); the periodic check re-arms later
+            return@withLock // another Wi-Fi (or the light is unplugged); the periodic check re-arms later
         }
-        val wasAway = store.presence == State.AWAY
-        store.presence = State.HOME
-        store.homeNetwork = network.toString()
-        Log.i(TAG, "wifi available: home on $network, wasAway=$wasAway")
-        if (wasAway) {
-            runCatchUp(app, network)
-            runArrivals(app, snapshot, network)
-        }
+        onHome(app, network, snapshot)
     }
 
-    /** Runs timed/sun automations that were missed while away, if they're still recent enough. */
+    /**
+     * The light answered on [network]. Queued runs always go now. Arrival automations need a real
+     * return: away, on a new connection (network ids change on reconnect), so a blip at home or a
+     * light that was briefly unplugged doesn't count as coming home.
+     */
+    private suspend fun onHome(app: LightApp, network: Network, snapshot: LightController.Snapshot) {
+        val store = app.automations
+        val arrived = store.presence == State.AWAY && store.homeNetwork != network.toString()
+        store.presence = State.HOME
+        store.homeNetwork = network.toString()
+        Log.i(TAG, "home on $network, arrived=$arrived")
+        runCatchUp(app, network)
+        if (arrived) runArrivals(app, snapshot, network)
+    }
+
+    /** Applies runs missed while away. One that fails stays queued for the next attempt. */
     private suspend fun runCatchUp(app: LightApp, network: Network) {
         val store = app.automations
         val now = System.currentTimeMillis()
         val pending = store.pendingCatchUp()
         if (pending.isEmpty()) return
-        Log.i(TAG, "catch-up: ${pending.size} pending")
-        for ((id, scheduled) in pending) {
-            store.clearPending(id)
-            val a = store.get(id)?.takeIf { it.enabled && it.catchUp } ?: continue
-            if (now - scheduled > CATCHUP_WINDOW_MS) {
-                store.setResult(id, "Missed ${stamp(scheduled)}: too long ago to catch up")
-                continue
+        val plan = CatchUp.plan(pending, store.items.value, now)
+        Log.i(TAG, "catch-up: run=${plan.run.size} replaced=${plan.replaced.size} expired=${plan.expired.size}")
+        plan.gone.forEach(store::clearPending)
+        plan.expired.forEach {
+            store.clearPending(it.automation.id)
+            store.setResult(it.automation.id, "Missed ${CatchUp.stamp(it.scheduled)}. Too long ago to catch up")
+        }
+        plan.replaced.forEach {
+            store.clearPending(it.automation.id)
+            store.setResult(it.automation.id, "Missed ${CatchUp.stamp(it.scheduled)}. A later automation took over")
+        }
+        for (m in plan.run) {
+            val id = m.automation.id
+            val ok = runCatching { app.controller.run(m.automation.command, network, automated = true) }.isSuccess
+            if (!ok) {
+                Log.i(TAG, "catch-up: $id failed, kept for the next attempt")
+                return
             }
-            runCatching { app.controller.run(a.command, network) }
-                .onSuccess { store.setResult(id, "Caught up ${stamp(now)} (missed while away)") }
-                .onFailure { store.setResult(id, "Catch-up failed: ${it.message ?: "error"}") }
+            store.clearPending(id)
+            store.setResult(id, "Ran ${CatchUp.stamp(now)}, caught up from ${CatchUp.stamp(m.scheduled)}")
         }
     }
-
-    private fun stamp(millis: Long): String =
-        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("EEE HH:mm"))
 
     private suspend fun runArrivals(app: LightApp, snapshot: LightController.Snapshot, network: Network) {
         val store = app.automations
@@ -145,7 +171,7 @@ object Presence {
                 store.setResult(a.id, "Skipped $stamp: light was already on")
                 continue
             }
-            runCatching { app.controller.run(a.command, network) }
+            runCatching { app.controller.run(a.command, network, automated = true) }
                 .onSuccess { store.setResult(a.id, "Ran $stamp (arrived home)") }
                 .onFailure { store.setResult(a.id, "Skipped $stamp: ${it.message ?: "error"}") }
         }

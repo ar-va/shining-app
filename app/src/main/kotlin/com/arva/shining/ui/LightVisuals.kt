@@ -3,17 +3,16 @@ package com.arva.shining.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import com.arva.shining.UiState
-import kotlin.math.roundToInt
 
-/** The colour the light is currently showing, for previews and the hero. */
+/** The colour the light is currently showing, for previews and the capsule. */
 fun lightColourOf(s: UiState): Color =
     if (s.colourMode) Color.hsv(s.hue, s.saturation, 1f) else whiteColor(s.temperature)
 
-/** Readable text/icon colour to place on top of [fill]. */
+/** Readable icon colour on top of [fill]: Ink or Paper, never pure black or white. */
 fun onColourOf(fill: Color): Color =
-    if (fill.luminance() > 0.55f) Color(0xE6000000) else Color(0xF2FFFFFF)
+    if (fill.luminance() > 0.4f) ArvaLight.text else ArvaLight.bg
 
-/** Plain-language name of a hue, for the state line. */
+/** Plain-language name of a hue. */
 fun colourName(hue: Float): String = when (((hue % 360) + 360) % 360) {
     in 0f..15f, in 345f..360f -> "Red"
     in 15f..45f -> "Orange"
@@ -30,11 +29,4 @@ fun warmthName(t: Float): String = when {
     t < 0.34f -> "Warm"
     t < 0.67f -> "Neutral"
     else -> "Cool"
-}
-
-/** "On · 60% · Warm" style descriptor for the current state. */
-fun stateDescriptor(s: UiState): String {
-    val pct = (s.brightness * 100).roundToInt()
-    val mode = if (s.colourMode) colourName(s.hue) else warmthName(s.temperature)
-    return "On · $pct% · $mode"
 }

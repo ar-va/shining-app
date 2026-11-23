@@ -74,7 +74,7 @@ data class Automation(
         else !(time >= quietFrom && time.isBefore(morning))
     }
 
-    /** "07:00 · Weekdays", "Sunset, 15 min before · Every day", "Arriving home · after dark". */
+    /** "07:00, weekdays", "Sunset, 15 min before, every day", "Arriving home, after dark, every day". */
     fun describeWhen(): String {
         val whenText = when (trigger) {
             is Trigger.Time -> "%02d:%02d".format(trigger.time.hour, trigger.time.minute)
@@ -92,7 +92,8 @@ data class Automation(
                 trigger.notAfter?.let { append(", not after %02d:%02d".format(it.hour, it.minute)) }
             }
         }
-        return "$whenText · ${describeDays(days)}"
+        val daysText = describeDays(days).let { if (it in NAMED_DAYS) it.lowercase() else it }
+        return "$whenText, $daysText"
     }
 
     fun toJson(): JsonObject = buildJsonObject {
@@ -146,6 +147,8 @@ data class Automation(
 
         private val WEEKDAYS = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)
         private val WEEKEND = setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)
+
+        private val NAMED_DAYS = setOf("Every day", "Weekdays", "Weekends", "Never")
 
         fun describeDays(days: Set<DayOfWeek>): String = when (days) {
             DayOfWeek.entries.toSet() -> "Every day"

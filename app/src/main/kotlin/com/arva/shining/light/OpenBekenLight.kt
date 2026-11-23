@@ -77,7 +77,7 @@ class OpenBekenLight(
             conn.requestMethod = "GET"
             authHeader?.let { conn.setRequestProperty("Authorization", it) }
             val code = conn.responseCode
-            if (code == 401) throw TuyaException("The light needs a web password — set it in the OpenBeken fields below")
+            if (code == 401) throw TuyaException("The light needs its web password. Add it in Settings.")
             if (code !in 200..299) throw TuyaException("The light returned HTTP $code")
             conn.inputStream.bufferedReader().use { it.readText() }
         } catch (e: IOException) {

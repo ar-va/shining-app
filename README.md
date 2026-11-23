@@ -14,7 +14,7 @@ It replaces the Smart Life app for day-to-day control:
 - One-tap presets
 - Finds the light on your network automatically
 
-The release APK is under 2 MB and needs no Google services. Design follows the [ARVA](https://ar-va.com) brand: Archivo, IBM Plex Sans and Plex Mono, the ARVA palette in light and dark.
+The release APK is under 2 MB and needs no Google services. Design follows the [ARVA](https://ar-va.com) brand: Brygada 1918, IBM Plex Sans and Plex Mono, the ARVA palette in light and dark.
 
 ## How it works
 
@@ -140,4 +140,4 @@ TUYA_MOCK_PORT=16668 TUYA_MOCK_VERSION=3.4 ./gradlew :tuya:test --rerun
 
 ## License
 
-Code: MIT. Fonts (Archivo, IBM Plex): SIL Open Font License, see `licenses/`. Icons: [Lucide](https://lucide.dev) (ISC). The ARVA name and leaf mark belong to ARVA and are not covered by the MIT licence.
+Code: MIT. Fonts (Brygada 1918, IBM Plex): SIL Open Font License, see `licenses/`. Icons: [Lucide](https://lucide.dev) (ISC). The ARVA name and leaf mark belong to ARVA and are not covered by the MIT licence.

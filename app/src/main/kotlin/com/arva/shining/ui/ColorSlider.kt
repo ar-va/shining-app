@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 /**
- * Slider whose track shows the light's actual colours (content, like a photo — not decoration).
+ * Slider whose track shows the light's actual colours (content, like a photo, not decoration).
  * Chrome follows the brand: 8 dp radius, 1 dp line border, slim handle without shadow.
  */
 @Composable
@@ -106,7 +106,7 @@ fun ColorSlider(
     }
 }
 
-private val HandleWidth = 14.dp
+private val HandleWidth = 16.dp
 private val HandleShape = RoundedCornerShape(6.dp)
 
 /** The hue track: the colours the strip can actually make. */

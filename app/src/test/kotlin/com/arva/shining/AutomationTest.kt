@@ -145,10 +145,10 @@ class AutomationTest {
     }
 
     @Test fun `descriptions`() {
-        assertEquals("07:05 · Weekdays", Automation(trigger = Trigger.Time(LocalTime.of(7, 5)),
+        assertEquals("07:05, weekdays", Automation(trigger = Trigger.Time(LocalTime.of(7, 5)),
             days = setOf(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY),
             command = LightCommand()).describeWhen())
-        assertEquals("Sunset, 15 min before · Every day", Automation(trigger = Trigger.Sun(SunTimes.Event.SUNSET, -15), command = LightCommand()).describeWhen())
+        assertEquals("Sunset, 15 min before, every day", Automation(trigger = Trigger.Sun(SunTimes.Event.SUNSET, -15), command = LightCommand()).describeWhen())
     }
 }
 

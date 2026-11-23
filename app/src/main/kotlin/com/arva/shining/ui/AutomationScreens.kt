@@ -61,6 +61,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -78,7 +80,6 @@ import com.arva.shining.automation.GeoPoint
 import com.arva.shining.automation.Scheduler
 import com.arva.shining.automation.SunTimes
 import com.arva.shining.automation.Trigger
-import com.arva.shining.lightApp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -129,7 +130,7 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "Automations run on this phone. They work while it's at home on your Wi-Fi.",
+                "Automations run on this phone. If one comes due while you're out, it runs when you get home.",
                 style = MaterialTheme.typography.bodyMedium, color = c.text2,
             )
 
@@ -151,7 +152,7 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             if (items.isEmpty()) {
                 Text("No automations yet", style = MaterialTheme.typography.titleLarge, color = c.text)
                 Text(
-                    "Start with one of these — tap to add it, then fine-tune the time and look.",
+                    "Start with one of these. Tap to add it, then adjust the time and look.",
                     style = MaterialTheme.typography.bodyMedium, color = c.text2,
                 )
                 starters().forEach { st ->
@@ -162,7 +163,7 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
                         onEdit(a.id) // open the editor pre-filled so they can tweak it
                     }
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(8.dp))
                 GroupLabel("Or build your own")
             } else {
                 items.forEach { a -> AutomationCard(a, location, now, results[a.id], onClick = { onEdit(a.id) }) }
@@ -178,7 +179,7 @@ fun AutomationsScreen(onBack: () -> Unit, onEdit: (String?) -> Unit) {
             }
 
             Spacer(Modifier.height(8.dp))
-            ExpandableCard("Links & other apps") { OtherAppsHelpContent() }
+            ExpandableCard("Links and other apps") { OtherAppsHelpContent() }
         }
     }
 }
@@ -202,11 +203,11 @@ private fun AutomationCard(a: Automation, location: GeoPoint?, now: ZonedDateTim
         else -> R.drawable.ic_clock
     }
     ArvaCard(onClick = onClick, padding = PaddingValues(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             TriggerBadge(icon, a.command, enabled = a.enabled)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(a.command.describe(), style = MaterialTheme.typography.titleSmall, color = if (a.enabled) c.text else c.text2)
-                Text(a.describeWhen(), style = MaterialTheme.typography.bodyMedium, color = c.text2)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(a.command.describe(), style = MaterialTheme.typography.titleMedium, color = if (a.enabled) c.text else c.text2)
+                Text(a.describeWhen(), style = MaterialTheme.typography.bodySmall, color = c.text2)
                 Text(status, style = MaterialTheme.typography.bodySmall, color = c.text2)
                 result?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.text2) }
             }
@@ -346,13 +347,13 @@ private fun starters(): List<Starter> = listOf(
 private fun StarterRow(st: Starter, onAdd: () -> Unit) {
     val c = Arva.colors
     ArvaCard(onClick = onAdd, padding = PaddingValues(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             TriggerBadge(st.icon, st.command, enabled = true)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(st.title, style = MaterialTheme.typography.titleSmall, color = c.text)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(st.title, style = MaterialTheme.typography.titleMedium, color = c.text)
                 Text(st.subtitle, style = MaterialTheme.typography.bodySmall, color = c.text2)
             }
-            Text("+", style = MaterialTheme.typography.headlineSmall, color = c.accent, modifier = Modifier.padding(end = 4.dp))
+            Icon(painterResource(R.drawable.ic_plus), contentDescription = null, tint = c.text2, modifier = Modifier.size(24.dp))
         }
     }
 }
@@ -362,15 +363,15 @@ private fun StarterRow(st: Starter, onAdd: () -> Unit) {
 private fun ExpandableCard(title: String, content: @Composable () -> Unit) {
     val c = Arva.colors
     var open by rememberSaveable { mutableStateOf(false) }
-    ArvaCard(padding = PaddingValues(20.dp)) {
+    ArvaCard {
         Row(
-            Modifier.fillMaxWidth().clip(RadiusControl).clickable { open = !open },
+            Modifier.fillMaxWidth().heightIn(min = 44.dp).arvaFocus().clip(RadiusControl).clickable(onClickLabel = if (open) "Collapse" else "Expand") { open = !open },
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.weight(1f))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = c.text, modifier = Modifier.weight(1f))
             Icon(
                 painterResource(R.drawable.ic_chevron_down), contentDescription = if (open) "Collapse" else "Expand",
-                tint = c.text2, modifier = Modifier.size(22.dp).rotate(if (open) 180f else 0f),
+                tint = c.text2, modifier = Modifier.size(24.dp).rotate(if (open) 180f else 0f),
             )
         }
         if (open) content()
@@ -481,7 +482,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
         Column(
             Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).navigationBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(28.dp),
+            verticalArrangement = Arrangement.spacedBy(32.dp),
         ) {
             EditorSection("When") {
                 Segmented(WhenKind.entries.map { it to it.label }, kind, { kind = it })
@@ -507,7 +508,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                 DayToggles(days) { days = it }
                 if (kind != WhenKind.ARRIVE) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Catch up when I get home", style = MaterialTheme.typography.titleSmall, color = c.text)
                             Text(
                                 "If it's missed while you're away, run it when you're back on your home Wi-Fi (up to 8 h later).",
@@ -531,7 +532,7 @@ fun AutomationEditor(id: String?, onDone: () -> Unit) {
                         Brush.horizontalGradient(listOf(if (c == ArvaDark) c.bg else c.text, colour)),
                     )
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Keep the light off", style = MaterialTheme.typography.titleSmall, color = c.text)
                             Text("Set this look but leave the light off, so it's ready the next time you turn it on.", style = MaterialTheme.typography.bodySmall, color = c.text2)
                         }
@@ -592,23 +593,24 @@ private fun OffsetStepper(minutes: Int, onChange: (Int) -> Unit) {
 private fun DayToggles(days: Set<Int>, onChange: (Set<Int>) -> Unit) {
     val c = Arva.colors
     val locale = LocalConfiguration.current.locales[0]
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
         DayOfWeek.entries.forEach { d ->
             val on = d.value in days
             Box(
                 Modifier
                     .weight(1f)
                     .heightIn(min = 44.dp)
+                    .arvaFocus()
                     .clip(RadiusControl)
-                    .background(if (on) c.accentTint else c.sunken)
-                    .border(1.dp, c.line, RadiusControl)
+                    .background(if (on) c.kikyoTint else c.sunken)
+                    .border(1.dp, if (on) c.kikyoTint else c.line, RadiusControl)
                     .toggleable(value = on, role = Role.Checkbox) { onChange(if (it) days + d.value else days - d.value) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     d.getDisplayName(TextStyle.NARROW, locale),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (on) c.accent else c.text2,
+                    color = if (on) c.onTint else c.text2,
                 )
             }
         }
@@ -621,20 +623,20 @@ private fun PresetChooser(selected: String, onSelect: (String) -> Unit) {
     val presets by LocalContext.current.lightApp.presetStore.items.collectAsStateWithLifecycle()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         presets.chunked(5).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { p ->
                     val on = p.label == selected
                     val colour = if (p.temperature != null) whiteColor(p.temperature) else Color.hsv(p.hue ?: 0f, p.saturation, 1f)
                     Column(
                         Modifier.weight(1f).clip(RadiusControl).clickable(onClickLabel = "Choose ${p.label}") { onSelect(p.label) },
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Box(
                             Modifier.fillMaxWidth().aspectRatio(1f).clip(RadiusControl).background(colour)
-                                .border(if (on) 2.dp else 1.dp, if (on) c.accent else c.line, RadiusControl),
+                                .border(if (on) 2.dp else 1.dp, if (on) c.kikyo else c.line, RadiusControl),
                         )
-                        Text(p.label, style = MaterialTheme.typography.bodySmall, color = if (on) c.accent else c.text2, maxLines = 1)
+                        Text(p.label, style = MaterialTheme.typography.bodySmall, color = if (on) c.kikyo else c.text2, maxLines = 1)
                     }
                 }
             }
@@ -650,16 +652,16 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
     }
 }
 
-/** Brand switch: the "on" state uses accent tint with an accent knob. */
+/** Brand switch: the "on" state is the Kikyō tint with a Kikyō knob. */
 @Composable
 fun ArvaSwitch(checked: Boolean, label: String, onChange: (Boolean) -> Unit) {
     val c = Arva.colors
     Switch(
         checked = checked,
         onCheckedChange = onChange,
-        modifier = Modifier.padding(start = 12.dp),
+        modifier = Modifier.padding(start = 12.dp).arvaFocus(RadiusCard).semantics { contentDescription = label },
         colors = SwitchDefaults.colors(
-            checkedThumbColor = c.accent, checkedTrackColor = c.accentTint, checkedBorderColor = c.accent,
+            checkedThumbColor = c.kikyo, checkedTrackColor = c.kikyoTint, checkedBorderColor = c.kikyo,
             uncheckedThumbColor = c.text2, uncheckedTrackColor = c.sunken, uncheckedBorderColor = c.line,
         ),
     )
@@ -673,17 +675,19 @@ private fun TimeDialog(initialSeconds: Int, onDismiss: () -> Unit, onConfirm: (I
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.surface,
+        tonalElevation = 0.dp,
         shape = RadiusCard,
-        confirmButton = { TextButton(onClick = { onConfirm(state.hour * 3600 + state.minute * 60) }) { Text("Set", color = c.accent) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.text2) } },
+        modifier = Modifier.border(1.dp, c.line, RadiusCard),
+        confirmButton = { TextButton(onClick = { onConfirm(state.hour * 3600 + state.minute * 60) }) { Text("Set", style = MaterialTheme.typography.labelLarge, color = c.kikyo) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = MaterialTheme.typography.labelLarge, color = c.text2) } },
         text = {
             TimePicker(
                 state = state,
                 colors = TimePickerDefaults.colors(
-                    clockDialColor = c.sunken, selectorColor = c.accent, containerColor = c.surface,
-                    timeSelectorSelectedContainerColor = c.accentTint, timeSelectorSelectedContentColor = c.accent,
+                    clockDialColor = c.sunken, selectorColor = c.kikyo, containerColor = c.surface,
+                    timeSelectorSelectedContainerColor = c.kikyoTint, timeSelectorSelectedContentColor = c.onTint,
                     timeSelectorUnselectedContainerColor = c.sunken, timeSelectorUnselectedContentColor = c.text,
-                    clockDialSelectedContentColor = c.onAccent, clockDialUnselectedContentColor = c.text,
+                    clockDialSelectedContentColor = c.onKikyo, clockDialUnselectedContentColor = c.text,
                 ),
             )
         },

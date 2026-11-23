@@ -1,7 +1,8 @@
-<!-- Feather "eye" (MIT), stroke 1.5 per ARVA icon rules. -->
+<!-- Lucide "eye" (ISC), stroke 1.5 per ARVA icon rules. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
     <path android:strokeColor="#FF000000" android:strokeWidth="1.5" android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M1,12s4,-8 11,-8s11,8 11,8s-4,8 -11,8s-11,-8 -11,-8z M15,12a3,3 0,1 1,-6 0a3,3 0,1 1,6 0z" />
+        android:strokeLineJoin="round" android:pathData="M2.062,12.348a1,1 0,0 1,0 -0.696a10.75,10.75 0,0 1,19.876 0a1,1 0,0 1,0 0.696a10.75,10.75 0,0 1,-19.876 0" />
+    <path android:strokeColor="#FF000000" android:strokeWidth="1.5" android:strokeLineCap="round"
+        android:strokeLineJoin="round" android:pathData="M12,9a3,3 0,1 0,0 6a3,3 0,1 0,0 -6" />
 </vector>

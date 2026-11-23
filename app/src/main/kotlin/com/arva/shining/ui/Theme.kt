@@ -28,8 +28,9 @@ import androidx.compose.ui.unit.sp
 import com.arva.shining.R
 
 /**
- * ARVA design tokens v3 (from ar-va.com brand/arva-tokens.css). Components use these
- * tokens only — never raw hex values.
+ * ARVA design tokens v5 (ar-va.com brand/arva-tokens.css). Components use these tokens only.
+ * Three named colours, one job each: Kikyō acts (buttons, links, the current choice), Kashiwa belongs
+ * (the leaf and the app's name), Bengara notices (a rare "New"). Anything else stays neutral.
  */
 @Immutable
 data class ArvaColors(
@@ -39,11 +40,15 @@ data class ArvaColors(
     val line: Color,
     val text: Color,
     val text2: Color,
-    val accent: Color,
-    val accentHover: Color,
-    val onAccent: Color,
-    val accentTint: Color,
-    val moss: Color,
+    val kikyo: Color,
+    val kikyoHover: Color,
+    val onKikyo: Color,
+    val kikyoTint: Color,
+    /** Text on [kikyoTint], the site's "on" state (`--on-text`). Plain Kikyō is under 4.5:1 there in dark. */
+    val onTint: Color,
+    val kashiwa: Color,
+    val bengara: Color,
+    val bengaraTint: Color,
     val success: Color,
     val warning: Color,
     val error: Color,
@@ -52,32 +57,33 @@ data class ArvaColors(
 val ArvaLight = ArvaColors(
     bg = Color(0xFFFDFDFB), surface = Color(0xFFFFFFFF), sunken = Color(0xFFF1F2F6), line = Color(0xFFD8DBE6),
     text = Color(0xFF1F2335), text2 = Color(0xFF565F89),
-    accent = Color(0xFF5A57C4), accentHover = Color(0xFF4B45B0), onAccent = Color(0xFFFFFFFF), accentTint = Color(0xFFE4E8FF),
-    moss = Color(0xFF237A50), success = Color(0xFF2F7D3A), warning = Color(0xFF8A5D10), error = Color(0xFFC0394B),
+    kikyo = Color(0xFF4A45B5), kikyoHover = Color(0xFF3D3891), onKikyo = Color(0xFFFFFFFF),
+    kikyoTint = Color(0xFFE4E8FF), onTint = Color(0xFF3D3891),
+    kashiwa = Color(0xFF15683F), bengara = Color(0xFFA3442B), bengaraTint = Color(0xFFF7E6DF),
+    success = Color(0xFF2F7D3A), warning = Color(0xFF8A5D10), error = Color(0xFFC0394B),
 )
 
 val ArvaDark = ArvaColors(
     bg = Color(0xFF15161C), surface = Color(0xFF1E2029), sunken = Color(0xFF262935), line = Color(0xFF333645),
     text = Color(0xFFC6CBE4), text2 = Color(0xFF9CA3C4),
-    accent = Color(0xFFA2A8FC), accentHover = Color(0xFFB7BDFF), onAccent = Color(0xFF15161C), accentTint = Color(0xFF3F3F75),
-    moss = Color(0xFF8BD8A9), success = Color(0xFF9ECE6A), warning = Color(0xFFE0AF68), error = Color(0xFFF7768E),
+    kikyo = Color(0xFF979CF7), kikyoHover = Color(0xFFB7BDFF), onKikyo = Color(0xFF15161C),
+    kikyoTint = Color(0xFF3F3F75), onTint = Color(0xFFCBD1FF),
+    kashiwa = Color(0xFF5FCF8F), bengara = Color(0xFFE57F57), bengaraTint = Color(0xFF4A2B22),
+    success = Color(0xFF9ECE6A), warning = Color(0xFFE0AF68), error = Color(0xFFF7768E),
 )
 
 val LocalArva = staticCompositionLocalOf { ArvaLight }
 
-/** Shortcut: `Arva.colors.accent` etc. */
+/** Shortcut: `Arva.colors.kikyo` etc. */
 object Arva {
     val colors: ArvaColors @Composable get() = LocalArva.current
 }
 
-// Typefaces: Archivo (titles, 600 at 112% width), IBM Plex Sans (everything read or operated),
-// IBM Plex Mono (uppercase labels, aligned numbers).
+// Typefaces: Brygada 1918 (titles, 600), IBM Plex Sans (everything read or operated),
+// IBM Plex Mono (numbers that line up, codes).
 @OptIn(ExperimentalTextApi::class)
-val Archivo = FontFamily(
-    Font(
-        R.font.archivo, FontWeight.SemiBold,
-        variationSettings = FontVariation.Settings(FontVariation.weight(600), FontVariation.width(112f)),
-    ),
+val Brygada = FontFamily(
+    Font(R.font.brygada_1918, FontWeight.SemiBold, variationSettings = FontVariation.Settings(FontVariation.weight(600))),
 )
 
 @OptIn(ExperimentalTextApi::class)
@@ -93,22 +99,22 @@ val PlexMono = FontFamily(
 )
 
 private val ArvaType = Typography(
-    // Titles (Archivo 600, 112%). Mobile sizes from the brand type scale.
-    headlineLarge = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 32.sp, lineHeight = 36.sp, letterSpacing = (-0.01).em),
-    headlineMedium = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 32.sp),
-    headlineSmall = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp),
-    titleLarge = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
-    titleMedium = TextStyle(fontFamily = Archivo, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
-    // Item titles under 18 sp stay in Plex Sans (Archivo looks cramped that small).
+    // Titles (Brygada 600), mobile sizes from the brand scale. Never below 18 sp.
+    headlineLarge = TextStyle(fontFamily = Brygada, fontWeight = FontWeight.SemiBold, fontSize = 40.sp, lineHeight = 42.sp, letterSpacing = (-0.01).em),
+    headlineMedium = TextStyle(fontFamily = Brygada, fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 32.sp),
+    headlineSmall = TextStyle(fontFamily = Brygada, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp),
+    titleLarge = TextStyle(fontFamily = Brygada, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp),
+    titleMedium = TextStyle(fontFamily = Brygada, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
+    // A control or row name stays in Plex Sans.
     titleSmall = TextStyle(fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 24.sp),
     // Body and meta (Plex Sans)
-    bodyLarge = TextStyle(fontFamily = PlexSans, fontWeight = FontWeight.Normal, fontSize = 18.sp, lineHeight = 28.sp),
+    bodyLarge = TextStyle(fontFamily = PlexSans, fontWeight = FontWeight.Normal, fontSize = 18.sp, lineHeight = 29.sp),
     bodyMedium = TextStyle(fontFamily = PlexSans, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp),
     bodySmall = TextStyle(fontFamily = PlexSans, fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 22.sp),
     // Buttons (Plex Sans 600, 16)
     labelLarge = TextStyle(fontFamily = PlexSans, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 20.sp),
-    // Eyebrow / label (Plex Mono 500, 12, uppercase, +0.08em) — callers uppercase the text.
-    labelMedium = TextStyle(fontFamily = PlexMono, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 0.08.em),
+    // Labels that carry information: Plex Sans 500, sentence case, never all caps.
+    labelMedium = TextStyle(fontFamily = PlexSans, fontWeight = FontWeight.Medium, fontSize = 16.sp, lineHeight = 21.sp),
     // Numbers and codes (Plex Mono 400)
     labelSmall = TextStyle(fontFamily = PlexMono, fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
 )
@@ -120,9 +126,10 @@ private fun arvaFromDynamic(s: androidx.compose.material3.ColorScheme, dark: Boo
     return ArvaColors(
         bg = s.background, surface = s.surface, sunken = s.surfaceVariant, line = s.outlineVariant,
         text = s.onBackground, text2 = s.onSurfaceVariant,
-        accent = s.primary, accentHover = androidx.compose.ui.graphics.lerp(s.primary, hoverTowards, 0.12f),
-        onAccent = s.onPrimary, accentTint = s.primaryContainer,
-        moss = s.tertiary, // the dynamic secondary accent takes Moss's role
+        kikyo = s.primary, kikyoHover = androidx.compose.ui.graphics.lerp(s.primary, hoverTowards, 0.12f),
+        onKikyo = s.onPrimary, kikyoTint = s.primaryContainer, onTint = s.onPrimaryContainer,
+        kashiwa = s.tertiary, // the dynamic secondary accent takes Kashiwa's role
+        bengara = brand.bengara, bengaraTint = brand.bengaraTint,
         success = brand.success, warning = brand.warning, error = s.error,
     )
 }
@@ -147,11 +154,11 @@ fun ShiningTheme(content: @Composable () -> Unit) {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     // Map tokens onto Material roles so stock components inherit the palette.
     val scheme = base.copy(
-        primary = c.accent, onPrimary = c.onAccent,
-        primaryContainer = c.accentTint, onPrimaryContainer = c.accent,
-        secondary = c.accent, onSecondary = c.onAccent,
-        secondaryContainer = c.accentTint, onSecondaryContainer = c.accent,
-        tertiary = c.accent, onTertiary = c.onAccent,
+        primary = c.kikyo, onPrimary = c.onKikyo,
+        primaryContainer = c.kikyoTint, onPrimaryContainer = c.onTint,
+        secondary = c.kikyo, onSecondary = c.onKikyo,
+        secondaryContainer = c.kikyoTint, onSecondaryContainer = c.onTint,
+        tertiary = c.kikyo, onTertiary = c.onKikyo,
         background = c.bg, onBackground = c.text,
         surface = c.bg, onSurface = c.text,
         surfaceVariant = c.sunken, onSurfaceVariant = c.text2,
@@ -159,8 +166,8 @@ fun ShiningTheme(content: @Composable () -> Unit) {
         surfaceContainerHigh = c.sunken, surfaceContainerHighest = c.sunken,
         surfaceTint = Color.Transparent,
         outline = c.line, outlineVariant = c.line,
-        error = c.error, onError = c.onAccent,
-        inverseSurface = c.text, inverseOnSurface = c.bg, inversePrimary = c.accentTint,
+        error = c.error, onError = c.onKikyo,
+        inverseSurface = c.text, inverseOnSurface = c.bg, inversePrimary = c.kikyoTint,
     )
     CompositionLocalProvider(LocalArva provides c) {
         MaterialTheme(colorScheme = scheme, typography = ArvaType, content = content)

@@ -16,8 +16,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -84,7 +84,7 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
 
     // Opt-in colour wash: a faint bloom of the light's colour behind the whole screen (off by default).
     val washOn by LocalContext.current.lightApp.themeStore.wash.collectAsState()
-    // Transient "Turned off · Undo" bar after switching the light off from the capsule.
+    // Transient "Turned off" bar with Undo after switching the light off from the capsule.
     var undoShow by remember { mutableStateOf(false) }
     LaunchedEffect(undoShow) { if (undoShow) { delay(4_000); undoShow = false } }
 
@@ -99,13 +99,13 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
                 HeaderIcon(R.drawable.ic_settings, "Light setup", onOpenSettings)
             }
             Box(Modifier.fillMaxWidth().height(2.dp)) {
-                if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.accent, trackColor = c.bg)
+                if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.kikyo, trackColor = c.bg)
             }
             updateVersion?.takeIf { !updateDismissed }?.let { v -> UpdateBanner(v, onOpenSettings) { updateDismissed = true } }
             if (!s.configured) {
                 Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
                 ) { SetupPrompt(onOpenSettings) }
             } else {
                 Controls(s, vm, onPoweredOff = { undoShow = true })
@@ -142,20 +142,15 @@ private fun UndoBar(modifier: Modifier, onUndo: () -> Unit) {
     val c = Arva.colors
     Row(
         modifier
-            .clip(RadiusTag)
+            .clip(RadiusControl)
             .background(c.surface)
-            .border(1.dp, c.line, RadiusTag)
-            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            .border(1.dp, c.line, RadiusControl)
+            .padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Turned off", style = MaterialTheme.typography.bodyMedium, color = c.text)
-        Text(
-            "Undo",
-            style = MaterialTheme.typography.labelLarge,
-            color = c.accent,
-            modifier = Modifier.clip(RadiusControl).clickable(onClickLabel = "Undo", onClick = onUndo).padding(horizontal = 10.dp, vertical = 4.dp),
-        )
+        TextLink("Undo", onUndo)
     }
 }
 
@@ -166,29 +161,29 @@ private fun UpdateBanner(version: String, onOpen: () -> Unit, onDismiss: () -> U
     Row(
         Modifier
             .fillMaxWidth()
-            .background(c.accent.copy(alpha = 0.12f))
+            .background(c.kikyoTint)
             .clickable(onClickLabel = "Open update", onClick = onOpen)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(start = 20.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Shining $version is available", style = MaterialTheme.typography.bodyMedium, color = c.text, modifier = Modifier.weight(1f))
-        Text("Update", style = MaterialTheme.typography.bodyMedium, color = c.accent)
-        Text("✕", style = MaterialTheme.typography.bodyMedium, color = c.text2, modifier = Modifier.clickable(onClickLabel = "Dismiss", onClick = onDismiss).padding(start = 4.dp))
+        Text("Shining $version is available", style = MaterialTheme.typography.bodyMedium, color = c.onTint, modifier = Modifier.weight(1f))
+        IconButton(onClick = onDismiss, modifier = Modifier.arvaFocus().size(48.dp)) {
+            Icon(painterResource(R.drawable.ic_x), contentDescription = "Dismiss", tint = c.onTint, modifier = Modifier.size(20.dp))
+        }
     }
 }
 
 @Composable
 private fun SetupPrompt(onOpenSettings: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Eyebrow("First run")
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Connect your lightstrip", style = MaterialTheme.typography.headlineMedium, color = Arva.colors.text)
         Text(
-            "Shining talks to the light over your Wi-Fi. It needs the light's details once — the README explains how to get them.",
+            "Shining talks to the light over your Wi-Fi. It needs the light's details once, and the README explains how to get them.",
             style = MaterialTheme.typography.bodyLarge,
             color = Arva.colors.text2,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
         PrimaryButton("Set up", onOpenSettings)
     }
 }
@@ -208,9 +203,9 @@ private fun ColumnScope.Controls(s: UiState, vm: MainViewModel, onPoweredOff: ()
     // Everything fits on one screen (no page scroll). Name + status at the top, the capsule fills the
     // flexible middle, then the brightness read-out and a horizontally scrolling preset row.
     Column(
-        Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(s.name, style = MaterialTheme.typography.headlineMedium, color = c.text, modifier = Modifier.weight(1f))
             StatusChip(s, onRetry = vm::refresh)
         }
@@ -260,15 +255,16 @@ private fun RecentsRow(vm: MainViewModel) {
     val c = Arva.colors
     val view = LocalView.current
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(top = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(top = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         GroupLabel("Recent", Modifier.padding(end = 4.dp))
         recent.forEach { hsv ->
             Box(
                 Modifier
-                    .size(40.dp)
+                    .size(48.dp)
+                    .arvaFocus(CircleShape)
                     .clip(CircleShape)
                     .background(Color.hsv(hsv.h, hsv.s, 1f))
                     .border(1.dp, c.line, CircleShape)
@@ -298,8 +294,8 @@ private fun PresetsRow(s: UiState, vm: MainViewModel, onOpenPicker: () -> Unit) 
             .horizontalScroll(rememberScrollState())
             .navigationBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(top = 20.dp, bottom = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(top = 16.dp, bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PickerDot(onClick = onOpenPicker)
@@ -336,29 +332,32 @@ private fun PresetsRow(s: UiState, vm: MainViewModel, onOpenPicker: () -> Unit) 
     }
 }
 
-private val DotSize = 60.dp
+private val DotSize = 64.dp
 
-/** Small pill shown only when there's something to say (updating / offline). Tap when offline to retry. */
+/** A small tag shown only when there's something to say (updating or offline). Tap when offline to retry. */
 @Composable
 private fun StatusChip(s: UiState, onRetry: () -> Unit) {
     val c = Arva.colors
     val offline = s.error != null || !s.connected
-    val (dot, label) = when {
-        s.loading -> c.accent to "Updating"
-        offline -> c.error to "Offline · retry"
+    val (colour, label) = when {
+        s.loading -> c.text2 to "Updating"
+        offline -> c.error to "Offline, tap to retry"
         else -> return
     }
-    Row(
+    Box(
         Modifier
+            .heightIn(min = 44.dp)
+            .arvaFocus(RadiusTag)
             .clip(RadiusTag)
-            .background(c.sunken)
-            .then(if (offline && !s.loading) Modifier.clickable(onClickLabel = "Retry connection", onClick = onRetry) else Modifier)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .then(if (offline && !s.loading) Modifier.clickable(onClickLabel = "Retry connection", onClick = onRetry) else Modifier),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
-        Text(label, style = MaterialTheme.typography.bodySmall, color = c.text2)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = colour,
+            modifier = Modifier.clip(RadiusTag).background(c.sunken).padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -371,6 +370,7 @@ private fun PresetDot(p: Preset, onClick: () -> Unit, onLongClick: () -> Unit) {
     Box(
         Modifier
             .size(DotSize)
+            .arvaFocus(CircleShape)
             .clip(CircleShape)
             .background(colour)
             .border(1.dp, c.line, CircleShape)
@@ -385,13 +385,14 @@ private fun PickerDot(onClick: () -> Unit) {
     Box(
         Modifier
             .size(DotSize)
+            .arvaFocus(CircleShape)
             .clip(CircleShape)
             .background(c.sunken)
             .border(1.dp, c.line, CircleShape)
             .clickable(onClickLabel = "Pick a colour", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(painterResource(R.drawable.ic_palette), contentDescription = null, tint = c.accent, modifier = Modifier.size(24.dp))
+        Icon(painterResource(R.drawable.ic_palette), contentDescription = null, tint = c.text, modifier = Modifier.size(24.dp))
     }
 }
 
@@ -402,13 +403,14 @@ private fun AddDot(onClick: () -> Unit) {
     Box(
         Modifier
             .size(DotSize)
+            .arvaFocus(CircleShape)
             .clip(CircleShape)
             .background(c.sunken)
             .border(1.dp, c.line, CircleShape)
             .clickable(onClickLabel = "Save current colour", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text("+", style = MaterialTheme.typography.headlineMedium, color = c.accent)
+        Icon(painterResource(R.drawable.ic_plus), contentDescription = null, tint = c.text, modifier = Modifier.size(24.dp))
     }
 }
 
@@ -419,15 +421,17 @@ private fun AddPresetDialog(defaultName: String, onDismiss: () -> Unit, onSave: 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.surface,
+        tonalElevation = 0.dp,
         shape = RadiusCard,
-        title = { Text("Save preset", color = c.text) },
+        modifier = Modifier.border(1.dp, c.line, RadiusCard),
+        title = { Text("Save preset", style = MaterialTheme.typography.titleLarge, color = c.text) },
         text = {
             ArvaField(name, { name = it }, "Name")
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim()) }) { Text("Save", color = c.accent) }
+            TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim()) }) { Text("Save", style = MaterialTheme.typography.labelLarge, color = c.kikyo) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.text2) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = MaterialTheme.typography.labelLarge, color = c.text2) } },
     )
 }
 
@@ -437,9 +441,11 @@ private fun ConfirmDialog(title: String, confirm: String, onConfirm: () -> Unit,
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.surface,
+        tonalElevation = 0.dp,
         shape = RadiusCard,
-        title = { Text(title, color = c.text) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm, color = c.error) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = c.text2) } },
+        modifier = Modifier.border(1.dp, c.line, RadiusCard),
+        title = { Text(title, style = MaterialTheme.typography.titleLarge, color = c.text) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm, style = MaterialTheme.typography.labelLarge, color = c.kikyo) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", style = MaterialTheme.typography.labelLarge, color = c.text2) } },
     )
 }

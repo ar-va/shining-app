@@ -4,9 +4,13 @@ import android.os.Build
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.View
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+
+/** The brand curve (`--ease`). Transitions run 150–250 ms and never bounce. */
+val ArvaEase = CubicBezierEasing(0.2f, 0.7f, 0.2f, 1f)
 
 /** False when the user has turned system animations off (Developer options / accessibility). */
 @Composable

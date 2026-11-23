@@ -24,7 +24,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -57,7 +56,7 @@ fun QrScannerOverlay(onResult: (String) -> Unit, onClose: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(ArvaDark.bg)) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
@@ -90,7 +89,7 @@ fun QrScannerOverlay(onResult: (String) -> Unit, onClose: () -> Unit) {
         Text(
             "Point the camera at the QR code from tools/setup_qr.py",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color.White,
+            color = ArvaDark.text,
             textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp),
         )
@@ -100,17 +99,17 @@ fun QrScannerOverlay(onResult: (String) -> Unit, onClose: () -> Unit) {
 @Composable
 private fun ArvaHeaderOnScrim(title: String, onClose: () -> Unit) {
     androidx.compose.foundation.layout.Row(
-        Modifier.fillMaxWidth().background(Color(0x66000000)).padding(horizontal = 8.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().background(ArvaDark.bg.copy(alpha = 0.7f)).padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         androidx.compose.material3.IconButton(onClick = onClose) {
             androidx.compose.material3.Icon(
                 androidx.compose.ui.res.painterResource(com.arva.shining.R.drawable.ic_arrow_left),
-                contentDescription = "Close", tint = Color.White,
+                contentDescription = "Close", tint = ArvaDark.text,
             )
         }
-        Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White)
+        Text(title, style = MaterialTheme.typography.titleLarge, color = ArvaDark.text)
     }
 }
 

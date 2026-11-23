@@ -21,7 +21,6 @@ import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.clickable
@@ -29,7 +28,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -101,11 +99,11 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Eyebrow("Your light", Modifier.weight(1f))
+                SectionLabel("Your light", Modifier.weight(1f))
                 StatusPill(s.online)
             }
 
@@ -113,7 +111,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
             SettingCard("Light type") {
                 Segmented(listOf(LightKind.TUYA to "Tuya", LightKind.OPENBEKEN to "OpenBeken"), s.kind, vm::setKind)
                 Text(
-                    if (s.isOpenBeken) "After flashing open firmware. Shining talks to it over local HTTP — it needs only the IP."
+                    if (s.isOpenBeken) "For a light flashed with open firmware. Shining talks to it over local HTTP and needs only its IP address."
                     else "Stock firmware over the Tuya LAN protocol.",
                     style = MaterialTheme.typography.bodySmall, color = c.text2,
                 )
@@ -129,7 +127,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         SecondaryButton("Scan QR", onClick = { scanQr() })
                         SecondaryButton(if (s.scanning) "Listening…" else "Scan Wi-Fi", vm::scan, enabled = !s.scanning)
-                        if (s.scanning) CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
+                        if (s.scanning) CircularProgressIndicator(Modifier.size(20.dp), color = c.kikyo, strokeWidth = 2.dp)
                     }
                     TextLink("Paste setup link", onClick = {
                         if (!vm.pasteLink(clipboard.getText()?.text)) {
@@ -140,14 +138,14 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                     s.found.forEachIndexed { i, d ->
                         if (i == 0) HorizontalDivider(color = c.line)
                         Row(
-                            Modifier.fillMaxWidth().clip(RadiusControl).clickable { vm.pick(d) }.padding(vertical = 10.dp, horizontal = 4.dp),
+                            Modifier.fillMaxWidth().clip(RadiusControl).clickable { vm.pick(d) }.padding(vertical = 12.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(d.ip, style = MaterialTheme.typography.titleSmall, color = c.text)
-                                Text("${d.id} · v${d.version}", style = MaterialTheme.typography.labelSmall, color = c.text2)
+                                Text("${d.id}, v${d.version}", style = MaterialTheme.typography.labelSmall, color = c.text2)
                             }
-                            Text("Use", style = MaterialTheme.typography.bodyMedium, color = c.accent)
+                            Text("Use", style = MaterialTheme.typography.labelLarge, color = c.kikyo)
                         }
                     }
                 }
@@ -165,7 +163,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                     ArvaField(s.obUser, { v -> vm.edit { it.copy(obUser = v) } }, "Web username (usually admin)")
                     ArvaField(
                         s.obPassword, { v -> vm.edit { it.copy(obPassword = v) } }, "Web password",
-                        supporting = "OpenBeken's login — leave blank if you didn't set one",
+                        supporting = "Leave blank if you didn't set one.",
                         password = true,
                     )
                 }
@@ -202,7 +200,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
             // Actions
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 SecondaryButton("Test", vm::test, enabled = !s.testing)
-                if (s.testing) CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
+                if (s.testing) CircularProgressIndicator(Modifier.size(20.dp), color = c.kikyo, strokeWidth = 2.dp)
                 Box(Modifier.weight(1f))
                 PrimaryButton("Save", onClick = {
                     val cfg = vm.save()
@@ -214,34 +212,32 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                 })
             }
 
-            Spacer(Modifier.height(4.dp))
-            Eyebrow("Personalize")
+            Spacer(Modifier.height(16.dp))
+            SectionLabel("Personalize")
             AppearanceCard()
             AmbientCard()
             PresetsCard()
 
-            Spacer(Modifier.height(4.dp))
-            Eyebrow("App")
+            Spacer(Modifier.height(16.dp))
+            SectionLabel("App")
             UpdatesCard()
             AboutFooter()
         }
     }
 }
 
-/** A small reachability chip beside the "Your light" header. Hidden until a probe has run. */
+/** A small reachability tag beside "Your light". Hidden until a probe has run. */
 @Composable
 private fun StatusPill(online: Boolean?) {
     if (online == null) return
     val c = Arva.colors
-    val (dot, label) = if (online) c.success to "Connected" else c.error to "Not reachable"
-    Row(
-        Modifier.clip(RadiusTag).background(c.sunken).padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
-        Text(label, style = MaterialTheme.typography.bodySmall, color = c.text2)
-    }
+    val (colour, label) = if (online) c.success to "Connected" else c.error to "Not reachable"
+    Text(
+        label,
+        style = MaterialTheme.typography.bodySmall,
+        color = colour,
+        modifier = Modifier.clip(RadiusTag).background(c.sunken).padding(horizontal = 8.dp, vertical = 4.dp),
+    )
 }
 
 /** App version and repository link, at the very bottom of Settings. */
@@ -251,19 +247,13 @@ private fun AboutFooter() {
     val context = LocalContext.current
     val repo = "https://github.com/ar-va/shining-app"
     Column(
-        Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text("Shining ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = c.text2)
-        Text(
-            "github.com/ar-va/shining-app",
-            style = MaterialTheme.typography.bodySmall,
-            color = c.accent,
-            modifier = Modifier.clickable {
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, repo.toUri())) }
-            },
-        )
+        BodyLink("github.com/ar-va/shining-app", onClick = {
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, repo.toUri())) }
+        })
     }
 }
 
@@ -276,7 +266,7 @@ private sealed interface UpdateUi {
 }
 
 /**
- * Auto-checks GitHub for a newer release on open and shows a clear status (✓ up to date / update
+ * Auto-checks GitHub for a newer release on open and shows a clear status (up to date or update
  * available) plus when it last looked. Opens the download in the browser (no in-app installer).
  */
 @Composable
@@ -302,27 +292,25 @@ private fun UpdatesCard() {
     LaunchedEffect(Unit) { check() } // check quietly when the card first appears
 
     SettingCard("Updates") {
-        Text("Shining ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall, color = c.text)
-
         when (val st = ui) {
             is UpdateUi.Available -> {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(c.accent))
                     Text("Version ${st.release.version} is available", style = MaterialTheme.typography.bodyMedium, color = c.text)
+                    NoticeTag("New")
                 }
                 if (st.release.notes.isNotBlank()) {
                     Text(st.release.notes, style = MaterialTheme.typography.bodySmall, color = c.text2, maxLines = 8, overflow = TextOverflow.Ellipsis)
                 }
-                PrimaryButton("Get the update", onClick = { Updater.openDownload(context, st.release.downloadUrl) })
+                SecondaryButton("Get the update", onClick = { Updater.openDownload(context, st.release.downloadUrl) })
                 Text("Opens the download in your browser. Tap the APK to install it.", style = MaterialTheme.typography.bodySmall, color = c.text2)
             }
             UpdateUi.UpToDate -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = c.success, modifier = Modifier.size(18.dp))
+                Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = c.success, modifier = Modifier.size(20.dp))
                 Text("You're up to date", style = MaterialTheme.typography.bodyMedium, color = c.success)
             }
             is UpdateUi.Error -> Text(st.message, style = MaterialTheme.typography.bodySmall, color = c.error)
             UpdateUi.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                CircularProgressIndicator(Modifier.size(18.dp), color = c.accent, strokeWidth = 2.dp)
+                CircularProgressIndicator(Modifier.size(20.dp), color = c.kikyo, strokeWidth = 2.dp)
                 Text("Checking for updates…", style = MaterialTheme.typography.bodyMedium, color = c.text2)
             }
             UpdateUi.Idle -> {}
@@ -330,9 +318,8 @@ private fun UpdatesCard() {
 
         if (ui != UpdateUi.Checking) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                lastChecked?.let {
-                    Text("Checked ${checkedAgo(it)}", style = MaterialTheme.typography.bodySmall, color = c.text2, modifier = Modifier.weight(1f))
-                } ?: Box(Modifier.weight(1f))
+                val checked = lastChecked?.let { ", checked ${checkedAgo(it)}" }.orEmpty()
+                Text("Version ${BuildConfig.VERSION_NAME}$checked", style = MaterialTheme.typography.bodySmall, color = c.text2, modifier = Modifier.weight(1f))
                 TextLink("Check again", onClick = { check() })
             }
         }
@@ -375,7 +362,7 @@ private fun AmbientCard() {
     val glow by store.glow.collectAsState()
     val wash by store.wash.collectAsState()
     SettingCard("Ambient") {
-        Text("Let the app glow in the light's colour. Off by default — it's a bit extra.", style = MaterialTheme.typography.bodySmall, color = c.text2)
+        Text("Let the app take on the light's colour. Both are off by default.", style = MaterialTheme.typography.bodySmall, color = c.text2)
         ToggleRow("Capsule glow", "A soft bloom behind the light, gently breathing.", glow, store::setGlow)
         ToggleRow("Colour wash", "Tint the whole screen with the current colour.", wash, store::setWash)
     }
@@ -386,7 +373,7 @@ private fun AmbientCard() {
 private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val c = Arva.colors
     Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = c.text)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = c.text2)
         }
@@ -409,7 +396,7 @@ private fun AppearanceCard() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Material You", style = MaterialTheme.typography.titleSmall, color = c.text)
                     Text("Use colours from your wallpaper.", style = MaterialTheme.typography.bodySmall, color = c.text2)
                 }
@@ -419,11 +406,11 @@ private fun AppearanceCard() {
     }
 }
 
-/** A titled card: Archivo heading + content, in the brand card style. */
+/** A titled card: Brygada heading and content, in the brand card style. */
 @Composable
 private fun SettingCard(title: String, content: @Composable ColumnScope.() -> Unit) {
-    ArvaCard(padding = PaddingValues(20.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = Arva.colors.text)
+    ArvaCard {
+        Text(title, style = MaterialTheme.typography.titleMedium, color = Arva.colors.text)
         content()
     }
 }

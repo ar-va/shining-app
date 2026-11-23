@@ -1,5 +1,6 @@
 package com.arva.shining
 
+import com.arva.shining.light.PasswordTrust
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -53,7 +54,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             for (unit in wake) {
                 val command = synchronized(this@MainViewModel) { pending.also { pending = null } } ?: continue
-                runCatching { controller.run(command) }
+                runCatching { controller.run(command, trust = PasswordTrust.FIRST_USE) }
                     .onSuccess { _state.update { it.copy(connected = true, error = null) }; persist() }
                     .onFailure { e -> _state.update { it.copy(connected = false, error = e.message) } }
                 delay(100)
@@ -83,7 +84,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (cfg?.isComplete != true) return
         if (showLoading) _state.update { it.copy(loading = true) }
         viewModelScope.launch {
-            runCatching { controller.status() }
+            runCatching { controller.status(trust = PasswordTrust.FIRST_USE) }
                 .onSuccess { snap ->
                     val s = snap.state
                     // Don't clobber sliders the user is actively adjusting.

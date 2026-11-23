@@ -4,8 +4,11 @@ import android.app.Application
 import android.content.Context
 import android.net.Network
 import androidx.core.content.edit
+import com.arva.shining.light.HomeNetworkGuard
 import com.arva.shining.light.LightDriver
 import com.arva.shining.light.OpenBekenLight
+import com.arva.shining.light.PasswordGate
+import com.arva.shining.light.PasswordTrust
 import com.arva.shining.light.TuyaLightDriver
 import com.arva.tuya.DeviceConfig
 import com.arva.tuya.LightKind
@@ -26,7 +29,8 @@ import java.io.IOException
 
 class LightApp : Application() {
     val store by lazy { ConfigStore(this) }
-    val controller by lazy { LightController(store) { automations.dropPendingAfterManualChange() } }
+    val homeNetwork by lazy { HomeNetworkGuard(this, store) }
+    val controller by lazy { LightController(store, homeNetwork) { automations.dropPendingAfterManualChange() } }
     val automations by lazy { com.arva.shining.automation.AutomationStore(this) }
     val themeStore by lazy { ThemeStore(this) }
     val presetStore by lazy { PresetStore(this) }
@@ -90,6 +94,11 @@ class ConfigStore(context: Context) {
         get() = prefs.getString("schema", null)?.let { runCatching { LightSchema.valueOf(it) }.getOrNull() }
         set(value) = prefs.edit { putString("schema", value?.name) }
 
+    /** Describes the Wi-Fi network the OpenBeken password may be sent on. Survives edits to the light. */
+    var homeNetwork: String?
+        get() = prefs.getString("home_net", null)
+        set(value) = prefs.edit { putString("home_net", value) }
+
     /** Last seen light state, shown instantly on open before the live read lands. */
     fun loadState(): CachedLightState? {
         if (!prefs.contains("st_on")) return null
@@ -119,7 +128,11 @@ data class CachedLightState(
  * Single owner of the connection to the light. Serializes calls, reuses a Tuya socket while in use
  * and closes it after 20 s idle (Tuya lights allow one local client; OpenBeken is stateless HTTP).
  */
-class LightController(private val store: ConfigStore, private val onManualCommand: () -> Unit = {}) {
+class LightController(
+    private val store: ConfigStore,
+    private val gate: PasswordGate,
+    private val onManualCommand: () -> Unit = {},
+) {
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var driver: LightDriver? = null
@@ -128,17 +141,24 @@ class LightController(private val store: ConfigStore, private val onManualComman
 
     data class Snapshot(val schema: LightSchema?, val state: LightState?, val dps: Map<String, Any?>)
 
-    suspend fun status(network: Network? = null): Snapshot = withDriver(network) { it.read().toSnapshot() }
+    suspend fun status(network: Network? = null, trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK): Snapshot =
+        withDriver(network, trust) { it.read().toSnapshot() }
 
     /**
      * Runs a [LightCommand], reading the light first when the command depends on its current state.
      * [network] pins the connection to one Wi-Fi network (used right after Wi-Fi connects).
      * [automated] marks runs from automations; anything else is a person's choice and cancels queued
-     * catch-ups. Returns the state read before the command, if one was read.
+     * catch-ups. [trust] says whether this call may record the current Wi-Fi as home.
+     * Returns the state read before the command, if one was read.
      */
-    suspend fun run(command: LightCommand, network: Network? = null, automated: Boolean = false): Snapshot? {
+    suspend fun run(
+        command: LightCommand,
+        network: Network? = null,
+        automated: Boolean = false,
+        trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK,
+    ): Snapshot? {
         if (command.isEmpty) return null
-        val before = withDriver(network) { driver ->
+        val before = withDriver(network, trust) { driver ->
             val state = if (command.needsState) driver.read().toSnapshot() else null
             driver.apply(command, state?.state)
             state
@@ -153,19 +173,20 @@ class LightController(private val store: ConfigStore, private val onManualComman
 
     private fun com.arva.shining.light.DriverReading.toSnapshot() = Snapshot(schema, state, detail)
 
-    private suspend fun <T> withDriver(network: Network?, block: (LightDriver) -> T): T = mutex.withLock {
+    private suspend fun <T> withDriver(network: Network?, trust: PasswordTrust, block: (LightDriver) -> T): T = mutex.withLock {
         withContext(Dispatchers.IO) {
             val cfg = store.load()?.takeIf { it.isComplete }
                 ?: throw TuyaException("Set up your light first")
             if (network != null) {
                 // One-off connection pinned to a network; a Tuya light allows one client, so drop ours first.
                 closeLocked()
-                return@withContext buildDriver(cfg, network).use(block)
+                return@withContext buildDriver(cfg, network, trust).use(block)
             }
             val d = driver?.takeIf { driverConfig == cfg } ?: run {
                 closeLocked()
-                buildDriver(cfg, null).also { driver = it; driverConfig = cfg }
+                buildDriver(cfg, null, trust).also { driver = it; driverConfig = cfg }
             }
+            (d as? OpenBekenLight)?.trust = trust
             val wasConnected = d.isConnected
             val result = try {
                 block(d)
@@ -179,9 +200,9 @@ class LightController(private val store: ConfigStore, private val onManualComman
         }
     }
 
-    private fun buildDriver(cfg: DeviceConfig, network: Network?): LightDriver = when (cfg.kind) {
+    private fun buildDriver(cfg: DeviceConfig, network: Network?, trust: PasswordTrust): LightDriver = when (cfg.kind) {
         LightKind.TUYA -> TuyaLightDriver(cfg, network, store.schema) { store.schema = it }
-        LightKind.OPENBEKEN -> OpenBekenLight.fromAddress(cfg.ip, network, cfg.username, cfg.password)
+        LightKind.OPENBEKEN -> OpenBekenLight.fromAddress(cfg.ip, gate, network, cfg.username, cfg.password, trust)
     }
 
     private fun scheduleIdleClose() {

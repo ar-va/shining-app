@@ -15,6 +15,7 @@ import android.net.NetworkRequest
 import android.util.Log
 import com.arva.shining.LightApp
 import com.arva.shining.LightController
+import com.arva.shining.light.PasswordTrust
 import com.arva.shining.lightApp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -73,11 +74,11 @@ object Presence {
     /** The app came to the front: if it can reach the light, anything queued runs now. */
     suspend fun onAppOpened(app: LightApp) {
         val tracking = app.automations.items.value.any { it.enabled && (it.trigger is Trigger.Arrive || it.catchUp) }
-        if (tracking) check(app)
+        if (tracking) check(app, PasswordTrust.FIRST_USE)
     }
 
     /** HOME if on Wi-Fi and the light answers, otherwise AWAY (and arm the listener). */
-    suspend fun check(app: LightApp): Unit = lock.withLock {
+    suspend fun check(app: LightApp, trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK): Unit = lock.withLock {
         val store = app.automations
         val wifi = currentWifi(app)
         Log.i(TAG, "check: wifi=$wifi presence=${store.presence} home=${store.homeNetwork}")
@@ -85,7 +86,7 @@ object Presence {
             // Same connection we already know is home, nothing queued: no traffic to the light.
             val settled = store.presence == State.HOME && store.homeNetwork == wifi.toString()
             if (settled && store.pendingCatchUp().isEmpty()) return@withLock
-            val snapshot = reach(app, wifi, waits = listOf(0L))
+            val snapshot = reach(app, wifi, waits = listOf(0L), trust)
             if (snapshot != null) {
                 onHome(app, wifi, snapshot)
                 return@withLock
@@ -178,10 +179,15 @@ object Presence {
     }
 
     /** Reads the light over [network], retrying while a fresh connection settles. */
-    private suspend fun reach(app: LightApp, network: Network, waits: List<Long>): LightController.Snapshot? {
+    private suspend fun reach(
+        app: LightApp,
+        network: Network,
+        waits: List<Long>,
+        trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK,
+    ): LightController.Snapshot? {
         for (wait in waits) {
             if (wait > 0) delay(wait)
-            runCatching { app.controller.status(network) }
+            runCatching { app.controller.status(network, trust) }
                 .onFailure { Log.i(TAG, "light check on $network failed: ${it.message}") }
                 .getOrNull()?.let { return it }
         }

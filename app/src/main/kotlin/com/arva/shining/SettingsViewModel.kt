@@ -1,5 +1,6 @@
 package com.arva.shining
 
+import com.arva.shining.light.PasswordTrust
 import android.app.Application
 import android.content.Context
 import android.net.wifi.WifiManager
@@ -77,7 +78,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val ok = withContext(Dispatchers.IO) {
                 runCatching {
-                    if (s.isOpenBeken) OpenBekenLight.fromAddress(cfg.ip, username = cfg.username, password = cfg.password).read()
+                    if (s.isOpenBeken) OpenBekenLight.fromAddress(cfg.ip, getApplication<Application>().lightApp.homeNetwork, username = cfg.username, password = cfg.password).read()
                     else TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).use { it.status() }
                     true
                 }.getOrDefault(false)
@@ -132,7 +133,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val text = withContext(Dispatchers.IO) {
                 runCatching {
                     if (s.isOpenBeken) {
-                        val state = OpenBekenLight.fromAddress(cfg.ip, username = cfg.username, password = cfg.password).read().state
+                        val state = OpenBekenLight.fromAddress(
+                            cfg.ip, getApplication<Application>().lightApp.homeNetwork,
+                            username = cfg.username, password = cfg.password, trust = PasswordTrust.CONFIRM,
+                        ).read().state
                         "Connected to OpenBeken.\n" + (state?.let { "Power ${if (it.on) "on" else "off"}, brightness ${(it.brightness * 100).toInt()}%" } ?: "")
                     } else {
                         val dps = TuyaDevice(cfg.id, cfg.ip, cfg.localKey, cfg.version).use { it.status() }

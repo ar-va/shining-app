@@ -26,6 +26,11 @@ object OpenBekenProtocol {
     const val CT_WARM = 500
     private const val CT_SPAN = CT_WARM - CT_COOL // 346
 
+    private val LOGIN_CHALLENGE = Regex("""^\s*basic\b.*\brealm\s*=\s*"OpenBeken HTTP Server"""", RegexOption.IGNORE_CASE)
+
+    /** True when a `WWW-Authenticate` header is OpenBeken's own login request. */
+    fun isLoginChallenge(header: String?): Boolean = header != null && LOGIN_CHALLENGE.containsMatchIn(header)
+
     /** The console commands to realise [command], given the light's [current] state. */
     fun commandsFor(command: LightCommand, current: LightState?): List<String> {
         val on = current?.on == true

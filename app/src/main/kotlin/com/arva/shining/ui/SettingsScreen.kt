@@ -163,7 +163,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                     ArvaField(s.obUser, { v -> vm.edit { it.copy(obUser = v) } }, "Web username (usually admin)")
                     ArvaField(
                         s.obPassword, { v -> vm.edit { it.copy(obPassword = v) } }, "Web password",
-                        supporting = "Leave blank if you didn't set one.",
+                        supporting = "Leave blank if you didn't set one. Shining only sends it on your home Wi-Fi.",
                         password = true,
                     )
                 }

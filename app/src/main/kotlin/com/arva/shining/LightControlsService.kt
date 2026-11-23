@@ -13,6 +13,7 @@ import android.service.controls.templates.ControlButton
 import android.service.controls.templates.RangeTemplate
 import android.service.controls.templates.ToggleRangeTemplate
 import androidx.annotation.RequiresApi
+import com.arva.shining.light.LightState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,7 +33,7 @@ class LightControlsService : ControlsProviderService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val subscribers = CopyOnWriteArrayList<Flow.Subscriber<in Control>>()
 
-    @Volatile private var last: LightController.Snapshot? = null
+    @Volatile private var last: LightState? = null
     @Volatile private var error: String? = null
 
     /** Shown when the user adds controls: one light, if the app is set up. */
@@ -104,7 +105,7 @@ class LightControlsService : ControlsProviderService() {
 
     private fun stateful(loading: Boolean): Control {
         val name = lightApp.store.load()?.name ?: getString(R.string.app_name)
-        val state = last?.state
+        val state = last
         val on = state?.on == true
         val percent = ((state?.brightness ?: 1f) * 100f).coerceIn(1f, 100f)
         val template = ToggleRangeTemplate(

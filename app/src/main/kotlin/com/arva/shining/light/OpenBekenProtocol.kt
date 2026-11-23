@@ -2,9 +2,6 @@ package com.arva.shining.light
 
 import com.arva.shining.LightCommand
 import com.arva.shining.findPreset
-import com.arva.tuya.Hsv
-import com.arva.tuya.LightMode
-import com.arva.tuya.LightState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -62,12 +59,20 @@ object OpenBekenProtocol {
         return out
     }
 
+    /** The mode these console commands leave the light in, or null if they don't choose one. */
+    fun modeSetBy(commands: List<String>): LightMode? =
+        commands.lastOrNull { it.startsWith("HSBColor ") || it.startsWith("CT ") }
+            ?.let { if (it.startsWith("CT ")) LightMode.WHITE else LightMode.COLOUR }
+
     fun warmthToCt(warmth01: Float): Int = (CT_WARM - warmth01.coerceIn(0f, 1f) * CT_SPAN).roundToInt()
 
     fun ctToWarmth(ct: Int): Float = ((CT_WARM - ct).toFloat() / CT_SPAN).coerceIn(0f, 1f)
 
-    /** Parses OpenBeken's `State` JSON into a [LightState], or null if it isn't recognisable. */
-    fun parseState(json: String): LightState? {
+    /**
+     * Parses OpenBeken's status JSON into a [LightState], or null if it isn't recognisable.
+     * [lastMode] is the answer when the output channels can't show the mode (see below).
+     */
+    fun parseState(json: String, lastMode: LightMode = LightMode.UNKNOWN): LightState? {
         val root = runCatching { Json.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return null
         // Real OpenBeken nests live state under "StatusSTS" (Status 11); the flat form (mock) has it at top level.
         val obj = (root["StatusSTS"] as? JsonObject) ?: root
@@ -84,15 +89,16 @@ object OpenBekenProtocol {
         val hue = hsb?.getOrNull(0) ?: 0f
         val sat = (hsb?.getOrNull(1) ?: 0f) / 100f
 
-        // Colour vs white: OpenBeken keeps HSBColor's saturation even in white/CT mode, so saturation
-        // alone misreports (a warm automation would still look like a colour). When the raw `Color`
-        // channels are known, white = the RGB channels are all off. Fall back to saturation otherwise.
-        val rgbOff = colorCh != null && colorCh.size >= 3 && colorCh[0] == 0 && colorCh[1] == 0 && colorCh[2] == 0
-        val white = when {
-            !on -> sat <= 0f            // off: channels are all zero, so trust the remembered saturation
-            colorCh != null -> rgbOff
-            else -> sat <= 0f
+        // Colour vs white: OpenBeken keeps HSBColor's saturation even in white/CT mode, so the raw
+        // `Color` channels decide. They are all 0 when off, and at about 8% or less because the
+        // firmware applies gamma 2.2 and rounds down, so then only the last known mode can answer.
+        val mode = when {
+            colorCh.isNullOrEmpty() -> if (sat <= 0f) LightMode.WHITE else LightMode.COLOUR
+            colorCh.all { it == 0 } -> lastMode
+            colorCh.take(3).all { it == 0 } -> LightMode.WHITE
+            else -> LightMode.COLOUR
         }
+        val white = mode == LightMode.WHITE
         // Brightness source depends on mode: in colour mode Shining sets it via HSBColor's value, and
         // the master `Dimmer` can stay at 100 — reading Dimmer there made the UI snap back to full.
         // In white/CT mode brightness is the `Dimmer` Shining sends alongside `CT`.
@@ -101,10 +107,10 @@ object OpenBekenProtocol {
         val brightness = (brightnessPct / 100f).coerceIn(0f, 1f)
         return LightState(
             on = on,
-            mode = if (white) LightMode.WHITE else LightMode.COLOUR,
+            mode = mode,
             brightness = brightness,
             temperature = ct?.let { ctToWarmth(it) } ?: if (white) 0.5f else null,
-            colour = if (white) null else Hsv(hue.coerceIn(0f, 360f), sat.coerceIn(0f, 1f), brightness),
+            colour = if (mode == LightMode.COLOUR) Hsv(hue.coerceIn(0f, 360f), sat.coerceIn(0f, 1f), brightness) else null,
         )
     }
 }

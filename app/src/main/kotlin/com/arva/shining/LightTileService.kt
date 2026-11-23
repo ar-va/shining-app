@@ -17,7 +17,7 @@ class LightTileService : TileService() {
         super.onStartListening()
         scope.launch {
             val snap = withTimeoutOrNull(4_000) { runCatching { lightApp.controller.status() }.getOrNull() }
-            render(snap?.state?.on, reachable = snap != null)
+            render(snap?.on, reachable = snap != null)
         }
     }
 

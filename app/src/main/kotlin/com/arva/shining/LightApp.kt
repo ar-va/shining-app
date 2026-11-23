@@ -4,28 +4,20 @@ import android.app.Application
 import android.content.Context
 import android.net.Network
 import androidx.core.content.edit
+import com.arva.shining.light.DeviceConfig
 import com.arva.shining.light.HomeNetworkGuard
-import com.arva.shining.light.LightDriver
+import com.arva.shining.light.LightException
+import com.arva.shining.light.LightMode
+import com.arva.shining.light.LightState
 import com.arva.shining.light.OpenBekenLight
 import com.arva.shining.light.PasswordGate
 import com.arva.shining.light.PasswordTrust
-import com.arva.shining.light.TuyaLightDriver
-import com.arva.tuya.DeviceConfig
-import com.arva.tuya.LightKind
-import com.arva.tuya.LightSchema
-import com.arva.tuya.LightState
-import com.arva.tuya.TuyaException
-import com.arva.tuya.TuyaVersion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.IOException
 
 class LightApp : Application() {
     val store by lazy { ConfigStore(this) }
@@ -52,47 +44,36 @@ class ConfigStore(context: Context) {
     private val prefs = context.getSharedPreferences("light", Context.MODE_PRIVATE)
 
     fun load(): DeviceConfig? {
-        val kind = LightKind.parse(prefs.getString("kind", null))
-        val name = prefs.getString("name", null) ?: "Lightstrip"
-        val ip = prefs.getString("ip", "") ?: ""
-        return when (kind) {
-            LightKind.OPENBEKEN ->
-                if (ip.isBlank()) null
-                else DeviceConfig(
-                    name, id = "", ip = ip, localKey = "", version = TuyaVersion.V33, kind = LightKind.OPENBEKEN,
-                    username = prefs.getString("ob_user", "admin")?.ifBlank { "admin" } ?: "admin",
-                    password = prefs.getString("ob_pass", "") ?: "",
-                )
-            LightKind.TUYA -> {
-                val id = prefs.getString("id", null) ?: return null
-                DeviceConfig(
-                    name = name, id = id, ip = ip,
-                    localKey = prefs.getString("key", "")!!,
-                    version = TuyaVersion.parse(prefs.getString("version", null)) ?: TuyaVersion.V33,
-                    kind = LightKind.TUYA,
-                )
-            }
-        }
+        // A light saved by a version that still supported Tuya has to be set up again.
+        if (prefs.getString("kind", null) != KIND) return null
+        val ip = prefs.getString("ip", "").orEmpty()
+        if (ip.isBlank()) return null
+        return DeviceConfig(
+            name = prefs.getString("name", null) ?: "Lightstrip",
+            ip = ip,
+            username = prefs.getString("ob_user", "admin")?.ifBlank { "admin" } ?: "admin",
+            password = prefs.getString("ob_pass", "") ?: "",
+        )
     }
 
     fun save(cfg: DeviceConfig) {
+        val sameLight = cfg.ip == prefs.getString("ip", null)
         prefs.edit {
-            putString("kind", cfg.kind.name)
-            putString("name", cfg.name); putString("id", cfg.id); putString("ip", cfg.ip)
-            putString("key", cfg.localKey); putString("version", cfg.version.text)
+            putString("kind", KIND)
+            putString("name", cfg.name); putString("ip", cfg.ip)
             putString("ob_user", cfg.username); putString("ob_pass", cfg.password)
-            remove("schema")
+            // Old Tuya credentials are no longer used, so they don't stay on the phone.
+            listOf("id", "key", "version", "schema").forEach(::remove)
+            if (!sameLight) remove("light_mode")
             // A different device: forget the cached look.
             listOf("st_on", "st_colour", "st_hue", "st_sat", "st_bright", "st_temp").forEach(::remove)
         }
     }
 
-    /** Updates the device's IP in place (used when it moves to a new address). */
-    fun updateIp(ip: String) = prefs.edit { putString("ip", ip) }
-
-    var schema: LightSchema?
-        get() = prefs.getString("schema", null)?.let { runCatching { LightSchema.valueOf(it) }.getOrNull() }
-        set(value) = prefs.edit { putString("schema", value?.name) }
+    /** The light's last known mode, for when its status can't show it (off or very dim). */
+    var lightMode: LightMode
+        get() = runCatching { LightMode.valueOf(prefs.getString("light_mode", null)!!) }.getOrDefault(LightMode.UNKNOWN)
+        set(value) = prefs.edit { putString("light_mode", value.name) }
 
     /** Describes the Wi-Fi network the OpenBeken password may be sent on. Survives edits to the light. */
     var homeNetwork: String?
@@ -117,6 +98,10 @@ class ConfigStore(context: Context) {
         putFloat("st_hue", s.hue); putFloat("st_sat", s.saturation)
         putFloat("st_bright", s.brightness); putFloat("st_temp", s.temperature)
     }
+
+    private companion object {
+        const val KIND = "OPENBEKEN"
+    }
 }
 
 data class CachedLightState(
@@ -124,98 +109,56 @@ data class CachedLightState(
     val saturation: Float, val brightness: Float, val temperature: Float,
 )
 
-/**
- * Single owner of the connection to the light. Serializes calls, reuses a Tuya socket while in use
- * and closes it after 20 s idle (Tuya lights allow one local client; OpenBeken is stateless HTTP).
- */
+/** Single owner of access to the light: serializes calls so commands reach it in order. */
 class LightController(
     private val store: ConfigStore,
     private val gate: PasswordGate,
     private val onManualCommand: () -> Unit = {},
 ) {
     private val mutex = Mutex()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var driver: LightDriver? = null
-    private var driverConfig: DeviceConfig? = null
-    private var idleJob: Job? = null
+    private var light: OpenBekenLight? = null
+    private var lightConfig: DeviceConfig? = null
 
-    data class Snapshot(val schema: LightSchema?, val state: LightState?, val dps: Map<String, Any?>)
-
-    suspend fun status(network: Network? = null, trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK): Snapshot =
-        withDriver(network, trust) { it.read().toSnapshot() }
+    suspend fun status(network: Network? = null, trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK): LightState =
+        withLight(network, trust) { read(it) }
 
     /**
      * Runs a [LightCommand], reading the light first when the command depends on its current state.
      * [network] pins the connection to one Wi-Fi network (used right after Wi-Fi connects).
      * [automated] marks runs from automations; anything else is a person's choice and cancels queued
      * catch-ups. [trust] says whether this call may record the current Wi-Fi as home.
-     * Returns the state read before the command, if one was read.
      */
     suspend fun run(
         command: LightCommand,
         network: Network? = null,
         automated: Boolean = false,
         trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK,
-    ): Snapshot? {
-        if (command.isEmpty) return null
-        val before = withDriver(network, trust) { driver ->
-            val state = if (command.needsState) driver.read().toSnapshot() else null
-            driver.apply(command, state?.state)
-            state
+    ) {
+        if (command.isEmpty) return
+        command.preset?.let { if (findPreset(it) == null) throw LightException("There's no preset named $it") }
+        withLight(network, trust) { light ->
+            val current = if (command.needsState) read(light) else null
+            light.apply(command, current)?.let { store.lightMode = it }
         }
         if (!automated) onManualCommand()
-        return before
     }
 
-    fun reset() {
-        scope.launch { mutex.withLock { closeLocked() } }
-    }
+    private fun read(light: OpenBekenLight): LightState =
+        light.read(store.lightMode).also { if (it.mode != LightMode.UNKNOWN) store.lightMode = it.mode }
 
-    private fun com.arva.shining.light.DriverReading.toSnapshot() = Snapshot(schema, state, detail)
-
-    private suspend fun <T> withDriver(network: Network?, trust: PasswordTrust, block: (LightDriver) -> T): T = mutex.withLock {
+    private suspend fun <T> withLight(network: Network?, trust: PasswordTrust, block: (OpenBekenLight) -> T): T = mutex.withLock {
         withContext(Dispatchers.IO) {
             val cfg = store.load()?.takeIf { it.isComplete }
-                ?: throw TuyaException("Set up your light first")
-            if (network != null) {
-                // One-off connection pinned to a network; a Tuya light allows one client, so drop ours first.
-                closeLocked()
-                return@withContext buildDriver(cfg, network, trust).use(block)
-            }
-            val d = driver?.takeIf { driverConfig == cfg } ?: run {
-                closeLocked()
-                buildDriver(cfg, null, trust).also { driver = it; driverConfig = cfg }
-            }
-            (d as? OpenBekenLight)?.trust = trust
-            val wasConnected = d.isConnected
-            val result = try {
-                block(d)
-            } catch (e: IOException) {
-                // A reused Tuya socket may have been dropped by the light; retry once on a fresh one.
-                if (!wasConnected) throw e
-                block(d)
-            }
-            scheduleIdleClose()
-            result
+                ?: throw LightException("Set up your light first")
+            // A pinned call gets its own object, so a login check never carries over between networks.
+            if (network != null) return@withContext block(build(cfg, network, trust))
+            val current = light?.takeIf { lightConfig == cfg }
+                ?: build(cfg, null, trust).also { light = it; lightConfig = cfg }
+            current.trust = trust
+            block(current)
         }
     }
 
-    private fun buildDriver(cfg: DeviceConfig, network: Network?, trust: PasswordTrust): LightDriver = when (cfg.kind) {
-        LightKind.TUYA -> TuyaLightDriver(cfg, network, store.schema) { store.schema = it }
-        LightKind.OPENBEKEN -> OpenBekenLight.fromAddress(cfg.ip, gate, network, cfg.username, cfg.password, trust)
-    }
-
-    private fun scheduleIdleClose() {
-        idleJob?.cancel()
-        idleJob = scope.launch {
-            delay(20_000)
-            mutex.withLock { driver?.close() }
-        }
-    }
-
-    private fun closeLocked() {
-        driver?.close()
-        driver = null
-        driverConfig = null
-    }
+    private fun build(cfg: DeviceConfig, network: Network?, trust: PasswordTrust) =
+        OpenBekenLight.fromAddress(cfg.ip, gate, network, cfg.username, cfg.password, trust)
 }

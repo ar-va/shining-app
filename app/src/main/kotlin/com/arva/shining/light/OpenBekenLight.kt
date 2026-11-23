@@ -2,8 +2,6 @@ package com.arva.shining.light
 
 import android.net.Network
 import com.arva.shining.LightCommand
-import com.arva.tuya.LightState
-import com.arva.tuya.TuyaException
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -22,7 +20,7 @@ class OpenBekenLight(
     private val password: String = "",
     private val gate: PasswordGate,
     private val timeoutMs: Int = 5000,
-) : LightDriver {
+) {
 
     /** Set by the owner before each use. See [PasswordTrust]. */
     @Volatile var trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK
@@ -36,35 +34,21 @@ class OpenBekenLight(
             "Basic " + java.util.Base64.getEncoder().encodeToString("$username:$password".toByteArray(Charsets.UTF_8))
         else null
 
-    // HTTP holds nothing open, and false stops a blind retry of a command the light may have obeyed.
-    override val isConnected: Boolean get() = false
-
-    override fun read(): DriverReading {
+    /** Reads the state. Blocking. [lastMode] is used when the light's channels can't show its mode. */
+    fun read(lastMode: LightMode = LightMode.UNKNOWN): LightState =
         // Real OpenBeken reports live state via "Status 11" (nested under StatusSTS). "State" is empty.
-        val json = request("Status 11")
-        val state = OpenBekenProtocol.parseState(json)
-            ?: throw TuyaException("This device didn't answer like an OpenBeken light")
-        return DriverReading(state = state, schema = null, detail = mapOf("state" to json))
-    }
+        OpenBekenProtocol.parseState(request("Status 11"), lastMode)
+            ?: throw LightException("This device didn't answer like an OpenBeken light")
 
-    override fun apply(command: LightCommand, current: LightState?) {
-        // Enable smooth hardware fades once per light per process (not on every 20 s reconnect), so
-        // colour/brightness changes ease instead of snapping. OpenBeken keeps this until it reboots.
-        val key = "$host:$port"
-        if (fadeConfigured.add(key)) {
-            runCatching { request("Fade 1"); request("Speed 3") }
-                .onFailure { fadeConfigured.remove(key); throw it } // retry next time if it failed
-        }
+    /** Applies [command] and returns the mode it put the light in, or null if it didn't set one. */
+    fun apply(command: LightCommand, current: LightState?): LightMode? {
+        val commands = OpenBekenProtocol.commandsFor(command, current)
         // One request per console command; OpenBeken applies them in order.
-        for (cmnd in OpenBekenProtocol.commandsFor(command, current)) request(cmnd)
+        commands.forEach { request(it) }
+        return OpenBekenProtocol.modeSetBy(commands)
     }
-
-    override fun close() {}
 
     companion object {
-        // Lights (by host:port) that have had fades enabled this process, so we send it only once.
-        private val fadeConfigured = java.util.Collections.synchronizedSet(mutableSetOf<String>())
-
         /** Builds a driver from an address that may include a port, e.g. "192.168.1.50" or "10.0.2.2:8080". */
         fun fromAddress(
             address: String,
@@ -96,10 +80,10 @@ class OpenBekenLight(
         val first = send(cmnd, route.network, withPassword = false)
         if (first.code != 401) return bodyOf(first)
         if (!OpenBekenProtocol.isLoginChallenge(first.challenge)) {
-            throw TuyaException("The device at $host isn't asking for an OpenBeken login, so Shining kept the password.")
+            throw LightException("The device at $host isn't asking for an OpenBeken login, so Shining kept the password.")
         }
         if (!route.maySendPassword) {
-            throw TuyaException("Shining doesn't recognise this Wi-Fi, so it kept the password. If you're home, press Test in Settings.")
+            throw LightException("Shining doesn't recognise this Wi-Fi, so it kept the password. If you're home, press Test in Settings.")
         }
         val body = bodyOf(send(cmnd, route.network, withPassword = true))
         verifiedOn = route.network
@@ -108,9 +92,9 @@ class OpenBekenLight(
     }
 
     private fun bodyOf(reply: Reply): String = when {
-        reply.code == 401 && authHeader == null -> throw TuyaException("The light needs its web password. Add it in Settings.")
-        reply.code == 401 -> throw TuyaException("The light rejected the web password. Check it in Settings.")
-        reply.code !in 200..299 -> throw TuyaException("The light returned HTTP ${reply.code}")
+        reply.code == 401 && authHeader == null -> throw LightException("The light needs its web password. Add it in Settings.")
+        reply.code == 401 -> throw LightException("The light rejected the web password. Check it in Settings.")
+        reply.code !in 200..299 -> throw LightException("The light returned HTTP ${reply.code}")
         else -> reply.body
     }
 
@@ -130,7 +114,7 @@ class OpenBekenLight(
             val body = if (code in 200..299) conn.inputStream.bufferedReader().use { it.readText() } else ""
             Reply(code, body, conn.getHeaderField("WWW-Authenticate"))
         } catch (e: IOException) {
-            throw TuyaException("Could not reach the light at $host (${e.message ?: "no answer"})", e)
+            throw LightException("Could not reach the light at $host (${e.message ?: "no answer"})", e)
         } finally {
             conn.disconnect()
         }

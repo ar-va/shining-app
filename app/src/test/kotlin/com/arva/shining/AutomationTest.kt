@@ -6,10 +6,6 @@ import com.arva.shining.automation.GeoPoint
 import com.arva.shining.automation.Presence
 import com.arva.shining.automation.SunTimes
 import com.arva.shining.automation.Trigger
-import com.arva.tuya.LightMode
-import com.arva.tuya.LightSchema
-import com.arva.tuya.LightState
-import com.arva.tuya.Hsv
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -94,6 +90,22 @@ class AutomationTest {
         val early = a.copy(trigger = Trigger.Arrive(afterDark = false, notAfter = LocalTime.of(1, 0)))
         assertTrue(early.arrivalAllowed(now.withHour(23), loc))
         assertFalse(early.arrivalAllowed(now.withHour(2), loc))
+    }
+
+    @Test fun `quiet hours from 06 00 cover the whole day`() {
+        val a = Automation(trigger = Trigger.Arrive(afterDark = false, notAfter = LocalTime.of(6, 0)), command = LightCommand())
+        assertFalse(a.arrivalAllowed(now.withHour(3), loc))
+        assertFalse(a.arrivalAllowed(now.withHour(12), loc))
+    }
+
+    @Test fun `a late alarm is left alone until it counts as lost`() {
+        val due = 100 * hour
+        val minute = 60_000L
+        assertEquals(CatchUp.DueAlarm.NOT_DUE, CatchUp.dueAlarm(null, due, false))
+        assertEquals(CatchUp.DueAlarm.NOT_DUE, CatchUp.dueAlarm(due, due - minute, false))
+        assertEquals(CatchUp.DueAlarm.STILL_COMING, CatchUp.dueAlarm(due, due + 2 * minute, false))
+        assertEquals(CatchUp.DueAlarm.LOST, CatchUp.dueAlarm(due, due + 15 * minute, false))
+        assertEquals(CatchUp.DueAlarm.LOST, CatchUp.dueAlarm(due, due + 2 * minute, alarmsCleared = true))
     }
 
     // Sunday, as in the user's report: sunset orange at 100%, then orange at 50% at 22:30.
@@ -189,9 +201,6 @@ class AutomationTest {
 }
 
 class LightCommandTest {
-    private val white = LightState(on = true, mode = LightMode.WHITE, brightness = 0.5f, temperature = 0.3f, colour = Hsv(200f, 1f, 1f))
-    private val colour = white.copy(mode = LightMode.COLOUR, colour = Hsv(120f, 1f, 0.5f))
-
     @Test fun `parse and serialize`() {
         val c = LightCommand.parse("?power=on&preset=Warm&brightness=40&junk=1")
         assertEquals(LightCommand(power = LightCommand.Power.ON, preset = "Warm", brightness = 40), c)
@@ -205,33 +214,10 @@ class LightCommandTest {
         assertTrue(LightCommand.parse("preset=%ZZ").isEmpty)
     }
 
-    @Test fun `keep off applies colour but switches off`() {
+    @Test fun `keep off survives being saved`() {
         val c = LightCommand.parse("preset=Warm&brightness=100&keepoff=1")
         assertTrue(c.keepOff)
         assertEquals(c, LightCommand.parse(c.toQuery()))
-        val dps = c.toDps(LightSchema.V2, null)
-        assertEquals(false, dps["20"]) // switch off
-        assertEquals("white", dps["21"]) // but warm white is set
-        assertEquals(1000, dps["22"]) // at 100%
-    }
-
-    @Test fun `off and toggle`() {
-        assertEquals(mapOf("20" to false), LightCommand.parse("power=off").toDps(LightSchema.V2, null))
-        assertEquals(mapOf("20" to false), LightCommand.parse("power=toggle").toDps(LightSchema.V2, white))
-        assertEquals(mapOf("20" to true), LightCommand.parse("power=toggle").toDps(LightSchema.V2, white.copy(on = false)))
-    }
-
-    @Test fun `preset sets mode and brightness`() {
-        assertEquals(mapOf("20" to true, "21" to "white", "22" to 406, "23" to 0), LightCommand.parse("preset=warm&brightness=40").toDps(LightSchema.V2, null))
-        val blue = LightCommand.parse("preset=Blue&brightness=100").toDps(LightSchema.V2, null)
-        assertEquals("colour", blue["21"])
-    }
-
-    @Test fun `brightness only keeps the current mode`() {
-        assertEquals("white", LightCommand.parse("brightness=80").toDps(LightSchema.V2, white)["21"])
-        val c = LightCommand.parse("brightness=80").toDps(LightSchema.V2, colour)
-        assertEquals("colour", c["21"])
-        assertEquals("007803e80322", c["24"]) // hue 120, sat 1000, value 10 + 0.8 × 990 = 802
     }
 
     @Test fun `descriptions`() {

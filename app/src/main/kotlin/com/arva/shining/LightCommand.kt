@@ -1,10 +1,5 @@
 package com.arva.shining
 
-import com.arva.tuya.Hsv
-import com.arva.tuya.LightDps
-import com.arva.tuya.LightMode
-import com.arva.tuya.LightSchema
-import com.arva.tuya.LightState
 import java.net.URLDecoder
 import java.net.URLEncoder
 import kotlin.math.roundToInt
@@ -30,8 +25,8 @@ data class LightCommand(
 
     val isEmpty: Boolean get() = this == LightCommand()
 
-    /** True when the current light state is needed to build the DPs. */
-    val needsState: Boolean get() = power == Power.TOGGLE || (!keepOff && power != Power.OFF && brightness == null) ||
+    /** True when the current light state is needed to build the light's commands. */
+    val needsState: Boolean get() = power == Power.TOGGLE || (power != Power.OFF && brightness == null) ||
         (brightness != null && preset == null && hue == null && warmth == null)
 
     fun toQuery(): String = listOfNotNull(
@@ -57,38 +52,6 @@ data class LightCommand(
             brightness != null -> "Brightness $brightness%$tail"
             else -> "Turn on"
         }
-    }
-
-    /**
-     * Data points for this command. [state] is the light's current state (needed when [needsState]);
-     * without it, missing values fall back to sensible defaults.
-     */
-    fun toDps(schema: LightSchema, state: LightState?): Map<String, Any> {
-        val on = state?.on == true
-        if (power == Power.OFF || (power == Power.TOGGLE && on)) return LightDps.power(schema, false)
-        if (power == Power.TOGGLE) return LightDps.power(schema, true)
-
-        val b = brightness?.let { (it / 100f).coerceIn(0.01f, 1f) } ?: state?.brightness ?: 1f
-        val p = preset?.let { findPreset(it) }
-        val targetHue = hue?.toFloat() ?: p?.hue
-        val targetWarmth = warmth?.let { it / 100f } ?: p?.temperature
-        val dps = when {
-            targetHue != null -> {
-                val sat = saturation?.let { it / 100f } ?: p?.saturation ?: 1f
-                LightDps.colour(schema, Hsv(targetHue.coerceIn(0f, 360f), sat.coerceIn(0f, 1f), b))
-            }
-            targetWarmth != null -> LightDps.white(schema, b, targetWarmth.coerceIn(0f, 1f))
-            brightness != null -> {
-                // Brightness only: keep the current mode and colour.
-                val colour = state?.colour
-                if (state?.mode == LightMode.COLOUR && colour != null) LightDps.colour(schema, colour.copy(v = b))
-                else LightDps.white(schema, b, state?.temperature)
-            }
-            else -> LightDps.power(schema, true)
-        }
-        // "Keep off": apply the colour/brightness but override the switch to off, so the light
-        // stays dark and shows this look the next time it's turned on.
-        return if (keepOff) dps + LightDps.power(schema, false) else dps
     }
 
     companion object {

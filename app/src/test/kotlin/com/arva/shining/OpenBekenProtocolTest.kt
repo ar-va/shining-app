@@ -1,11 +1,9 @@
 package com.arva.shining
 
+import com.arva.shining.light.Hsv
+import com.arva.shining.light.LightMode
+import com.arva.shining.light.LightState
 import com.arva.shining.light.OpenBekenProtocol
-import com.arva.tuya.DeviceConfig
-import com.arva.tuya.Hsv
-import com.arva.tuya.LightKind
-import com.arva.tuya.LightMode
-import com.arva.tuya.LightState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -125,11 +123,37 @@ class OpenBekenProtocolTest {
         assertNull(OpenBekenProtocol.parseState("not json"))
     }
 
-    @Test fun `openbeken setup link round trips`() {
-        val cfg = DeviceConfig("Desk", id = "", ip = "192.168.1.50", localKey = "", version = com.arva.tuya.TuyaVersion.V33, kind = LightKind.OPENBEKEN)
-        val back = DeviceConfig.fromSetupLink(cfg.toSetupLink())!!
-        assertEquals(LightKind.OPENBEKEN, back.kind)
-        assertEquals("192.168.1.50", back.ip)
-        assertTrue(back.isComplete)
+    @Test fun `a white light that is off stays white`() {
+        val off = """{"StatusSTS":{"Dimmer":40,"Color":"0,0,0,0,0","HSBColor":"35,82,62","CT":450,"POWER":"OFF"}}"""
+        val s = OpenBekenProtocol.parseState(off, LightMode.WHITE)!!
+        assertEquals(LightMode.WHITE, s.mode)
+        assertEquals(0.4f, s.brightness, 0.01f)
+        assertEquals(listOf("led_enableAll 1", "Dimmer 50"), OpenBekenProtocol.commandsFor(LightCommand(brightness = 50), s))
+    }
+
+    @Test fun `a very dim colour stays a colour`() {
+        val dim = """{"StatusSTS":{"Dimmer":100,"Color":"0,0,0,0,0","HSBColor":"230,100,5","CT":155,"POWER":"ON"}}"""
+        val s = OpenBekenProtocol.parseState(dim, LightMode.COLOUR)!!
+        assertEquals(LightMode.COLOUR, s.mode)
+        assertEquals(0.05f, s.brightness, 0.01f)
+        assertEquals(listOf("led_enableAll 1", "HSBColor 230,100,6"), OpenBekenProtocol.commandsFor(LightCommand(brightness = 6), s))
+    }
+
+    @Test fun `dark channels with no known mode do not guess`() {
+        val s = OpenBekenProtocol.parseState("""{"POWER":"OFF","Dimmer":40,"HSBColor":"35,82,62","Color":"0,0,0,0,0"}""")!!
+        assertEquals(LightMode.UNKNOWN, s.mode)
+        assertNull(s.colour)
+    }
+
+    @Test fun `commands report the mode they set`() {
+        assertEquals(LightMode.WHITE, OpenBekenProtocol.modeSetBy(listOf("led_enableAll 1", "CT 500", "Dimmer 40")))
+        assertEquals(LightMode.COLOUR, OpenBekenProtocol.modeSetBy(listOf("HSBColor 230,100,50", "led_enableAll 0")))
+        assertNull(OpenBekenProtocol.modeSetBy(listOf("led_enableAll 1", "Dimmer 40")))
+    }
+
+    @Test fun `keep off without a brightness keeps the current one`() {
+        val c = LightCommand.parse("preset=Warm&keepoff=1")
+        assertTrue(c.needsState)
+        assertEquals(listOf("CT 500", "Dimmer 50", "led_enableAll 0"), OpenBekenProtocol.commandsFor(c, white))
     }
 }

@@ -26,7 +26,7 @@ class CommandActivity : Activity() {
 /**
  * Broadcast for automation apps (Tasker, MacroDroid, …):
  * action `com.arva.shining.action.LIGHT`, package `com.arva.shining`, with either an extra
- * `command` = "preset=Warm&brightness=40" or separate extras power/preset/brightness/hue/saturation/warmth.
+ * `command` = "preset=Warm&brightness=40" or separate extras power/preset/brightness/hue/saturation/warmth/keepoff.
  */
 class CommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -43,7 +43,7 @@ class CommandReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION = "com.arva.shining.action.LIGHT"
-        private val KEYS = listOf("power", "preset", "brightness", "hue", "saturation", "warmth")
+        private val KEYS = listOf("power", "preset", "brightness", "hue", "saturation", "warmth", "keepoff")
     }
 }
 

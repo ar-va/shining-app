@@ -54,9 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.arva.shining.BuildConfig
 import com.arva.shining.MainViewModel
-import com.arva.shining.Updater
 import com.arva.shining.Preset
 import com.arva.shining.R
 import com.arva.shining.UiState
@@ -66,12 +64,7 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
     val s by vm.state.collectAsStateWithLifecycle()
     val c = Arva.colors
 
-    // Quiet, one-shot update check on open: if GitHub has a newer release, offer it (dismissable).
-    var updateVersion by remember { mutableStateOf<String?>(null) }
-    var updateDismissed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        Updater.checkLatest()?.let { if (Updater.isNewer(it.version, BuildConfig.VERSION_NAME)) updateVersion = it.version }
-    }
+    val updateVersion by vm.update.collectAsStateWithLifecycle()
 
     // Live sync: while the screen is on top, poll quietly so external changes (voice, another phone)
     // show up and the socket stays warm for snappy slider response.
@@ -105,7 +98,7 @@ fun MainScreen(vm: MainViewModel, onOpenSettings: () -> Unit, onOpenAutomations:
             Box(Modifier.fillMaxWidth().height(2.dp)) {
                 if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.kikyo, trackColor = c.bg)
             }
-            updateVersion?.takeIf { !updateDismissed }?.let { v -> UpdateBanner(v, onOpenSettings) { updateDismissed = true } }
+            updateVersion?.let { v -> UpdateBanner(v, onOpenSettings, vm::dismissUpdate) }
             if (!s.configured) {
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp, vertical = 24.dp),
@@ -183,7 +176,7 @@ private fun SetupPrompt(onOpenSettings: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Connect your lightstrip", style = MaterialTheme.typography.headlineMedium, color = Arva.colors.text)
         Text(
-            "Shining talks to the light over your Wi-Fi. It needs the light's details once, and the README explains how to get them.",
+            "Shining talks to your OpenBeken light over Wi-Fi. It needs the light's IP address once.",
             style = MaterialTheme.typography.bodyLarge,
             color = Arva.colors.text2,
         )

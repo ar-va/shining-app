@@ -4,10 +4,9 @@ import com.arva.shining.light.PasswordTrust
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.arva.tuya.DeviceConfig
-import com.arva.tuya.Hsv
-import com.arva.tuya.LightKind
-import com.arva.tuya.LightMode
+import com.arva.shining.light.DeviceConfig
+import com.arva.shining.light.Hsv
+import com.arva.shining.light.LightMode
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +27,12 @@ data class UiState(
     val saturation: Float = 1f,
     val brightness: Float = 1f,
     val temperature: Float = 0.3f,
-)
+) {
+    fun showing(c: CachedLightState) = copy(
+        on = c.on, colourMode = c.colourMode, hue = c.hue,
+        saturation = c.saturation, brightness = c.brightness, temperature = c.temperature,
+    )
+}
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val store = app.lightApp.store
@@ -41,6 +45,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _recent = MutableStateFlow<List<Hsv>>(emptyList())
     val recent: StateFlow<List<Hsv>> = _recent
 
+    // A newer version on GitHub, checked once per app run. Dismissing it lasts for that run.
+    private val _update = MutableStateFlow<String?>(null)
+    val update: StateFlow<String?> = _update
+
     // Slider drags produce many changes a few ms apart. Keep only the latest desired command and
     // send it at most every ~100 ms, so the light isn't flooded.
     @Volatile private var pending: LightCommand? = null
@@ -48,7 +56,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // Suppress live-sync writes right after the user touches something, so polls don't fight input.
     @Volatile private var lastInteraction = 0L
-    @Volatile private var healing = false
+
+    // Reads in progress (main thread only). Polls wait their turn so they can't queue up ahead of a tap.
+    private var refreshing = 0
 
     init {
         viewModelScope.launch {
@@ -56,80 +66,61 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val command = synchronized(this@MainViewModel) { pending.also { pending = null } } ?: continue
                 runCatching { controller.run(command, trust = PasswordTrust.FIRST_USE) }
                     .onSuccess { _state.update { it.copy(connected = true, error = null) }; persist() }
-                    .onFailure { e -> _state.update { it.copy(connected = false, error = e.message) } }
+                    .onFailure { e ->
+                        // Nothing newer is queued, so go back to what the light last confirmed.
+                        val saved = store.loadState().takeIf { pending == null }
+                        _state.update { s -> (saved?.let(s::showing) ?: s).copy(connected = false, error = e.message) }
+                    }
                 delay(100)
             }
+        }
+        viewModelScope.launch {
+            Updater.checkLatest()?.takeIf { Updater.isNewer(it.version, BuildConfig.VERSION_NAME) }
+                ?.let { _update.value = it.version }
         }
     }
 
     private fun initialState(): UiState {
         val cfg = store.load()
-        val c = store.loadState()
-        return UiState(
-            configured = cfg?.isComplete == true,
-            name = cfg?.name ?: "Lightstrip",
-            on = c?.on ?: false,
-            colourMode = c?.colourMode ?: true,
-            hue = c?.hue ?: 30f,
-            saturation = c?.saturation ?: 1f,
-            brightness = c?.brightness ?: 1f,
-            temperature = c?.temperature ?: 0.3f,
-        )
+        val base = UiState(configured = cfg?.isComplete == true, name = cfg?.name ?: "Lightstrip")
+        return store.loadState()?.let(base::showing) ?: base
+    }
+
+    fun dismissUpdate() {
+        _update.value = null
     }
 
     /** [showLoading] false for background polls, so the top bar doesn't flash every few seconds. */
     fun refresh(showLoading: Boolean = true) {
+        if (!showLoading && refreshing > 0) return
         val cfg = store.load()
         _state.update { it.copy(configured = cfg?.isComplete == true, name = cfg?.name ?: "Lightstrip") }
         if (cfg?.isComplete != true) return
         if (showLoading) _state.update { it.copy(loading = true) }
+        refreshing++
         viewModelScope.launch {
-            runCatching { controller.status(trust = PasswordTrust.FIRST_USE) }
-                .onSuccess { snap ->
-                    val s = snap.state
-                    // Don't clobber sliders the user is actively adjusting.
-                    val quiet = System.currentTimeMillis() - lastInteraction > QUIET_MS && pending == null
-                    _state.update {
-                        when {
-                            s == null -> it.copy(loading = false, connected = true, error = "Connected, but this doesn't look like a light")
-                            !quiet -> it.copy(loading = false, connected = true, error = null)
-                            else -> it.copy(
+            try {
+                runCatching { controller.status(trust = PasswordTrust.FIRST_USE) }
+                    .onSuccess { s ->
+                        // Don't clobber sliders the user is actively adjusting.
+                        val quiet = System.currentTimeMillis() - lastInteraction > QUIET_MS && pending == null
+                        _state.update {
+                            if (!quiet) it.copy(loading = false, connected = true, error = null)
+                            else it.copy(
                                 loading = false, connected = true, error = null,
                                 on = s.on,
                                 colourMode = s.mode == LightMode.COLOUR || (s.mode != LightMode.WHITE && it.colourMode),
                                 hue = s.colour?.h ?: it.hue,
                                 saturation = s.colour?.s ?: it.saturation,
-                                brightness = s.brightness,
+                                brightness = if (s.mode == LightMode.UNKNOWN) it.brightness else s.brightness,
                                 temperature = s.temperature ?: it.temperature,
                             )
                         }
+                        persist()
                     }
-                    if (s != null) persist()
-                }
-                .onFailure { e ->
-                    _state.update { it.copy(loading = false, connected = false, error = e.message) }
-                    healIp(cfg, e)
-                }
-        }
-    }
-
-    /** If a Tuya light became unreachable, look for it at a new IP and retry once. */
-    private fun healIp(cfg: DeviceConfig, error: Throwable) {
-        if (healing || cfg.kind != LightKind.TUYA || cfg.id.isBlank()) return
-        val msg = error.message.orEmpty().lowercase()
-        if (!(msg.contains("reach") || msg.contains("answer") || msg.contains("connect"))) return
-        healing = true
-        viewModelScope.launch {
-            try {
-                val newIp = LanDiscovery.findIp(getApplication(), cfg.id)
-                if (newIp != null && newIp != cfg.ip) {
-                    store.updateIp(newIp)
-                    controller.reset()
-                    refresh(showLoading = false)
-                }
-            } catch (_: Exception) {
+                    .onFailure { e -> _state.update { it.copy(loading = false, connected = false, error = e.message) } }
             } finally {
-                healing = false
+                refreshing--
             }
         }
     }
@@ -141,7 +132,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun applyConfig(cfg: DeviceConfig) {
         store.save(cfg)
-        controller.reset()
         refresh()
     }
 

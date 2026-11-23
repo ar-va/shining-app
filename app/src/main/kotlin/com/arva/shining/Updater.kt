@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.net.HttpURLConnection
@@ -19,14 +18,15 @@ import java.net.URL
  * It deliberately does NOT download or install the APK itself. An app that holds
  * REQUEST_INSTALL_PACKAGES and fetches an APK from the network to install trips Google Play Protect's
  * "downloads and installs apps" (dropper) heuristic and gets flagged as harmful. Instead we open the
- * release download in the browser, which installs it through the normal, trusted system flow.
+ * release page. Not the APK link: Chrome holds that file at 100% until its "File might be harmful"
+ * prompt is answered, and a launch from another app makes that prompt easy to miss.
  */
 object Updater {
     private const val REPO = "ar-va/shining-app"
     private const val UA = "Shining-Updater" // generic client name; never any user/personal info
     private val json = Json { ignoreUnknownKeys = true }
 
-    data class Release(val version: String, val notes: String, val downloadUrl: String)
+    data class Release(val version: String, val notes: String, val pageUrl: String)
 
     /** The latest published release, or null if it can't be fetched. */
     suspend fun checkLatest(): Release? = withContext(Dispatchers.IO) {
@@ -39,16 +39,10 @@ object Updater {
             if (conn.responseCode != 200) return@withContext null
             val obj = json.parseToJsonElement(conn.inputStream.bufferedReader().use { it.readText() }).jsonObject
             val tag = obj["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
-            val page = obj["html_url"]?.jsonPrimitive?.contentOrNull ?: "https://github.com/$REPO/releases/latest"
-            // Prefer the APK asset's direct link (browser downloads it straight away); fall back to the page.
-            val apk = obj["assets"]?.jsonArray.orEmpty()
-                .map { it.jsonObject }
-                .firstOrNull { it["name"]?.jsonPrimitive?.contentOrNull?.endsWith(".apk") == true }
-                ?.get("browser_download_url")?.jsonPrimitive?.contentOrNull
             Release(
                 version = tag.removePrefix("v"),
                 notes = (obj["body"]?.jsonPrimitive?.contentOrNull).orEmpty().trim(),
-                downloadUrl = apk ?: page,
+                pageUrl = obj["html_url"]?.jsonPrimitive?.contentOrNull ?: "https://github.com/$REPO/releases/latest",
             )
         } catch (_: Exception) {
             null
@@ -68,8 +62,8 @@ object Updater {
         return false
     }
 
-    /** Opens the release download in the browser; it handles the download + install the trusted way. */
-    fun openDownload(context: Context, url: String) {
+    /** Opens the release page in the browser; it handles the download + install the trusted way. */
+    fun openRelease(context: Context, url: String) {
         runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }

@@ -340,7 +340,8 @@ private fun starters(): List<Starter> = listOf(
     Starter(R.drawable.ic_sun, "Off at sunrise", "Turn the light off when it gets light out",
         Trigger.Sun(SunTimes.Event.SUNRISE, 0), LightCommand(power = LightCommand.Power.OFF)),
     Starter(R.drawable.ic_wifi, "On when I get home", "Comes on as you arrive, after dark",
-        Trigger.Arrive(afterDark = true, notAfter = null), LightCommand(power = LightCommand.Power.ON)),
+        // Quiet hours by default: a long Wi-Fi outage at night looks just like coming home.
+        Trigger.Arrive(afterDark = true, notAfter = LocalTime.of(23, 30)), LightCommand(power = LightCommand.Power.ON)),
 )
 
 @Composable

@@ -19,16 +19,25 @@ object Scheduler {
     const val EXTRA_ID = "id"
     const val EXTRA_AT = "at"
 
-    fun rescheduleAll(context: Context) {
+    fun rescheduleAll(context: Context, alarmsCleared: Boolean = false) {
         val app = context.lightApp
         val store = app.automations
         val alarms = context.getSystemService(AlarmManager::class.java)
         val now = ZonedDateTime.now()
+        val nowMillis = now.toInstant().toEpochMilli()
         for (a in store.items.value) {
+            val due = store.dueAt(a.id)
+            when (CatchUp.dueAlarm(due, nowMillis, alarmsCleared)) {
+                // Replacing an alarm Android still owes us would move this run to tomorrow.
+                CatchUp.DueAlarm.STILL_COMING -> continue
+                CatchUp.DueAlarm.LOST -> store.recordMissed(a, due!!, "phone was off or asleep")
+                CatchUp.DueAlarm.NOT_DUE -> {}
+            }
             val pi = firePendingIntent(context, a.id, null)
             alarms.cancel(pi)
-            val next = a.nextRun(now, store.location) ?: continue
-            val at = next.toInstant().toEpochMilli()
+            val at = a.nextRun(now, store.location)?.toInstant()?.toEpochMilli()
+            store.setDueAt(a.id, at)
+            if (at == null) continue
             val intent = firePendingIntent(context, a.id, at)
             if (canScheduleExact(context)) {
                 alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)

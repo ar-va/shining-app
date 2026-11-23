@@ -3,15 +3,10 @@ package com.arva.shining.ui
 import com.arva.shining.BuildConfig
 import androidx.core.net.toUri
 import android.content.Intent
-import androidx.core.content.ContextCompat
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
-import androidx.activity.result.contract.ActivityResultContracts
-import android.content.pm.PackageManager
-import android.Manifest
-import androidx.activity.compose.rememberLauncherForActivityResult
 import com.arva.shining.lightApp
 import kotlinx.coroutines.launch
 import com.arva.shining.ThemeMode
@@ -24,7 +19,6 @@ import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,7 +33,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,7 +41,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,40 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arva.shining.R
 import com.arva.shining.SettingsViewModel
-import com.arva.tuya.DeviceConfig
-import com.arva.tuya.LightKind
-import com.arva.tuya.TuyaVersion
+import com.arva.shining.light.DeviceConfig
 
 @Composable
 fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceConfig) -> Unit) {
     val s by vm.state.collectAsStateWithLifecycle()
     val c = Arva.colors
-    val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     LaunchedEffect(Unit) { vm.probe() }
-
-    // In-app QR scanner (CameraX + ZXing). Shown as a full-screen overlay once camera is allowed.
-    var showScanner by remember { mutableStateOf(false) }
-    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) showScanner = true
-        else Toast.makeText(context, "Camera permission is needed to scan", Toast.LENGTH_SHORT).show()
-    }
-    fun scanQr() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) showScanner = true
-        else cameraPermission.launch(Manifest.permission.CAMERA)
-    }
-
-    if (showScanner) {
-        QrScannerOverlay(
-            onResult = { text ->
-                showScanner = false
-                if (vm.pasteLink(text)) Toast.makeText(context, "Setup link scanned", Toast.LENGTH_SHORT).show()
-                else Toast.makeText(context, "That QR isn't a Shining setup link", Toast.LENGTH_SHORT).show()
-            },
-            onClose = { showScanner = false },
-        )
-        return
-    }
 
     Column(Modifier.fillMaxSize().background(c.bg)) {
         ArvaHeader(title = "Settings", navigation = { HeaderIcon(R.drawable.ic_arrow_left, "Back", onBack) })
@@ -108,78 +74,20 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                 StatusPill(s.online)
             }
 
-            // Light type
-            SettingCard("Light type") {
-                Segmented(listOf(LightKind.TUYA to "Tuya", LightKind.OPENBEKEN to "OpenBeken"), s.kind, vm::setKind)
-                Text(
-                    if (s.isOpenBeken) "For a light flashed with open firmware. Shining talks to it over local HTTP and needs only its IP address."
-                    else "Stock firmware over the Tuya LAN protocol.",
-                    style = MaterialTheme.typography.bodySmall, color = c.text2,
-                )
-            }
-
-            // Find on Wi-Fi (Tuya only)
-            if (!s.isOpenBeken) {
-                SettingCard("Find it") {
-                    Text(
-                        "Scan the setup QR with your camera, paste the setup link, or find the light on Wi-Fi.",
-                        style = MaterialTheme.typography.bodyMedium, color = c.text2,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SecondaryButton("Scan QR", onClick = { scanQr() })
-                        SecondaryButton(if (s.scanning) "Listening…" else "Scan Wi-Fi", vm::scan, enabled = !s.scanning)
-                        if (s.scanning) CircularProgressIndicator(Modifier.size(20.dp), color = c.kikyo, strokeWidth = 2.dp)
-                    }
-                    TextLink("Paste setup link", onClick = {
-                        if (!vm.pasteLink(clipboard.getText()?.text)) {
-                            Toast.makeText(context, "The clipboard has no shining:// setup link", Toast.LENGTH_SHORT).show()
-                        }
-                    })
-                    s.scanMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.text2) }
-                    s.found.forEachIndexed { i, d ->
-                        if (i == 0) HorizontalDivider(color = c.line)
-                        Row(
-                            Modifier.fillMaxWidth().clip(RadiusControl).clickable { vm.pick(d) }.padding(vertical = 12.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(d.ip, style = MaterialTheme.typography.titleSmall, color = c.text)
-                                Text("${d.id}, v${d.version}", style = MaterialTheme.typography.labelSmall, color = c.text2)
-                            }
-                            Text("Use", style = MaterialTheme.typography.labelLarge, color = c.kikyo)
-                        }
-                    }
-                }
-            }
-
             // Device details
             SettingCard("Device") {
                 ArvaField(s.name, { v -> vm.edit { it.copy(name = v) } }, "Name")
                 ArvaField(
                     s.ip, { v -> vm.edit { it.copy(ip = v) } },
-                    if (s.isOpenBeken) "IP address (from the OpenBeken page)" else "IP address",
+                    "IP address (from the OpenBeken page)",
                     mono = true, keyboardType = KeyboardType.Uri,
                 )
-                if (s.isOpenBeken) {
-                    ArvaField(s.obUser, { v -> vm.edit { it.copy(obUser = v) } }, "Web username (usually admin)")
-                    ArvaField(
-                        s.obPassword, { v -> vm.edit { it.copy(obPassword = v) } }, "Web password",
-                        supporting = "Leave blank if you didn't set one. Shining only sends it on your home Wi-Fi.",
-                        password = true,
-                    )
-                }
-                if (!s.isOpenBeken) {
-                    ArvaField(s.id, { v -> vm.edit { it.copy(id = v) } }, "Device ID", mono = true)
-                    ArvaField(
-                        s.key, { v -> vm.edit { it.copy(key = v) } }, "Local key", mono = true,
-                        isError = s.key.isNotEmpty() && s.key.length != 16,
-                        supporting = "${s.key.length} of 16 characters",
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GroupLabel("Protocol version")
-                        Segmented(TuyaVersion.entries.map { it to it.text }, s.version, { v -> vm.edit { it.copy(version = v) } })
-                    }
-                }
+                ArvaField(s.obUser, { v -> vm.edit { it.copy(obUser = v) } }, "Web username (usually admin)")
+                ArvaField(
+                    s.obPassword, { v -> vm.edit { it.copy(obPassword = v) } }, "Web password",
+                    supporting = "Leave blank if you didn't set one. Shining only sends it on your home Wi-Fi.",
+                    password = true,
+                )
             }
 
             // Test result (shown above the action bar so it's visible once produced)
@@ -206,7 +114,7 @@ fun SettingsScreen(vm: SettingsViewModel, onBack: () -> Unit, onSave: (DeviceCon
                 PrimaryButton("Save", onClick = {
                     val cfg = vm.save()
                     if (cfg == null) {
-                        Toast.makeText(context, if (s.isOpenBeken) "Enter the light's IP" else "Fill in the IP, device ID and a 16-character key", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Enter the light's IP", Toast.LENGTH_SHORT).show()
                     } else {
                         onSave(cfg)
                     }
@@ -268,7 +176,7 @@ private sealed interface UpdateUi {
 
 /**
  * Auto-checks GitHub for a newer release on open and shows a clear status (up to date or update
- * available) plus when it last looked. Opens the download in the browser (no in-app installer).
+ * available) plus when it last looked. Opens the release page in the browser (no in-app installer).
  */
 @Composable
 private fun UpdatesCard() {
@@ -302,8 +210,8 @@ private fun UpdatesCard() {
                 if (st.release.notes.isNotBlank()) {
                     Text(st.release.notes, style = MaterialTheme.typography.bodySmall, color = c.text2, maxLines = 8, overflow = TextOverflow.Ellipsis)
                 }
-                SecondaryButton("Get the update", onClick = { Updater.openDownload(context, st.release.downloadUrl) })
-                Text("Opens the download in your browser. Tap the APK to install it.", style = MaterialTheme.typography.bodySmall, color = c.text2)
+                SecondaryButton("Get the update", onClick = { Updater.openRelease(context, st.release.pageUrl) })
+                Text("Opens the release page. Tap the APK under Assets, then choose Download anyway.", style = MaterialTheme.typography.bodySmall, color = c.text2)
             }
             UpdateUi.UpToDate -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(painterResource(R.drawable.ic_check), contentDescription = null, tint = c.success, modifier = Modifier.size(20.dp))

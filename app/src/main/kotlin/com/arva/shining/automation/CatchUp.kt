@@ -14,6 +14,18 @@ object CatchUp {
     /** A run missed longer ago than this no longer applies (a 07:00 wake-up must not fire at 21:00). */
     const val WINDOW_MS = 8 * 60 * 60_000L
 
+    /** How late Android may deliver an alarm before the run counts as missed. */
+    const val LATE_MS = 15 * 60_000L
+
+    enum class DueAlarm { NOT_DUE, STILL_COMING, LOST }
+
+    /** The alarm saved for [due]. [alarmsCleared]: Android dropped all alarms (a reboot or an app update). */
+    fun dueAlarm(due: Long?, now: Long, alarmsCleared: Boolean): DueAlarm = when {
+        due == null || due > now -> DueAlarm.NOT_DUE
+        !alarmsCleared && now - due < LATE_MS -> DueAlarm.STILL_COMING
+        else -> DueAlarm.LOST
+    }
+
     data class Missed(val automation: Automation, val scheduled: Long)
 
     data class Plan(

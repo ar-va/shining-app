@@ -23,9 +23,9 @@ class AutomationReceiver : BroadcastReceiver() {
             Scheduler.ACTION_WIFI -> networkFrom(intent)?.let { network -> runAsync(app) { Presence.onWifiAvailable(app, network) } }
             Intent.ACTION_BOOT_COMPLETED -> {
                 Presence.reset(context)
-                Scheduler.rescheduleAll(context)
+                Scheduler.rescheduleAll(context, alarmsCleared = true)
             }
-            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> Scheduler.rescheduleAll(context, alarmsCleared = true)
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
             AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> Scheduler.rescheduleAll(context)
@@ -50,10 +50,11 @@ class AutomationReceiver : BroadcastReceiver() {
         val id = intent.getStringExtra(Scheduler.EXTRA_ID) ?: return
         val automation = store.get(id)?.takeIf { it.enabled }
         val scheduled = intent.getLongExtra(Scheduler.EXTRA_AT, System.currentTimeMillis())
+        store.setDueAt(id, null)
         try {
             if (automation == null) return
             // A long-overdue alarm (phone was off) would switch the light at an odd time: skip it.
-            if (abs(System.currentTimeMillis() - scheduled) > STALE_MS) {
+            if (abs(System.currentTimeMillis() - scheduled) > CatchUp.LATE_MS) {
                 missed(app, automation, scheduled, "phone was off or asleep")
                 return
             }
@@ -73,14 +74,8 @@ class AutomationReceiver : BroadcastReceiver() {
      * Wi-Fi listener now, rather than whenever the next periodic check happens to run.
      */
     private suspend fun missed(app: LightApp, automation: Automation, scheduled: Long, why: String) {
-        val store = app.automations
-        if (!automation.catchUp) {
-            store.setResult(automation.id, "Skipped ${CatchUp.stamp(scheduled)}: $why")
-            return
-        }
-        store.setPending(automation.id, scheduled)
-        store.setResult(automation.id, "Missed ${CatchUp.stamp(scheduled)}. Runs when you get home")
-        Presence.check(app)
+        app.automations.recordMissed(automation, scheduled, why)
+        if (automation.catchUp) Presence.check(app)
     }
 
     @Suppress("DEPRECATION")
@@ -95,9 +90,5 @@ class AutomationReceiver : BroadcastReceiver() {
         e.message?.contains("reach", ignoreCase = true) == true ||
             e.message?.contains("answer", ignoreCase = true) == true -> "light unreachable (not home?)"
         else -> e.message ?: "error"
-    }
-
-    private companion object {
-        const val STALE_MS = 15 * 60_000L
     }
 }

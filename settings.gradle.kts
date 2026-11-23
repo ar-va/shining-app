@@ -14,4 +14,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "shining"
-include(":app", ":tuya")
+include(":app")

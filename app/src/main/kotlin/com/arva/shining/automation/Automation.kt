@@ -70,7 +70,7 @@ data class Automation(
         // Quiet from `notAfter` until 06:00 (or until sunrise when the light is "after dark" only).
         val time = now.toLocalTime()
         val morning = LocalTime.of(6, 0)
-        return if (quietFrom.isAfter(morning)) time.isBefore(quietFrom) && !time.isBefore(morning)
+        return if (quietFrom >= morning) time.isBefore(quietFrom) && !time.isBefore(morning)
         else !(time >= quietFrom && time.isBefore(morning))
     }
 

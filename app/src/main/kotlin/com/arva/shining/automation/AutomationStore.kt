@@ -27,13 +27,31 @@ class AutomationStore(context: Context) {
         val i = list.indexOfFirst { it.id == automation.id }
         if (i >= 0) list[i] = automation else list += automation
         write(list)
+        setDueAt(automation.id, null) // an edit replaces the alarm, even one that is running late
     }
 
     @Synchronized
     fun delete(id: String) {
         write(_items.value.filterNot { it.id == id })
-        prefs.edit { remove("result.$id"); remove("pending.$id") }
+        prefs.edit { remove("result.$id"); remove("pending.$id"); remove("due.$id") }
         _results.value = _results.value - id
+    }
+
+    /** When this automation's current alarm is due. Cleared once the alarm arrives. */
+    fun dueAt(id: String): Long? = prefs.getLong("due.$id", -1L).takeIf { it >= 0 }
+
+    fun setDueAt(id: String, millis: Long?) = prefs.edit {
+        if (millis == null) remove("due.$id") else putLong("due.$id", millis)
+    }
+
+    /** Queues a missed run for catch-up, or notes the skip if this automation doesn't catch up. */
+    fun recordMissed(automation: Automation, scheduled: Long, why: String) {
+        if (automation.catchUp) {
+            setPending(automation.id, scheduled)
+            setResult(automation.id, "Missed ${CatchUp.stamp(scheduled)}. Runs when you get home")
+        } else {
+            setResult(automation.id, "Skipped ${CatchUp.stamp(scheduled)}: $why")
+        }
     }
 
     // Timed/sun runs missed while away, to run on the next arrival home. id -> scheduled epoch millis.

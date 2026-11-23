@@ -1,13 +1,13 @@
 package com.arva.shining
 
 import android.net.Network
+import com.arva.shining.light.LightException
 import com.arva.shining.light.LightRoute
 import com.arva.shining.light.NetworkFingerprint
 import com.arva.shining.light.OpenBekenLight
 import com.arva.shining.light.OpenBekenProtocol
 import com.arva.shining.light.PasswordGate
 import com.arva.shining.light.PasswordTrust
-import com.arva.tuya.TuyaException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -63,7 +63,7 @@ class OpenBekenPasswordTest {
     @Test fun `unrecognised wifi never receives the password`() {
         val d = device(openBeken)
         val gate = Gate(allowed = false)
-        val error = assertThrows(TuyaException::class.java) { d.light(gate).read() }
+        val error = assertThrows(LightException::class.java) { d.light(gate).read() }
         assertTrue(error.message!!.contains("recognise"))
         assertEquals(listOf<String?>(null), d.auth.toList())
         assertEquals(0, gate.accepted)
@@ -71,14 +71,14 @@ class OpenBekenPasswordTest {
 
     @Test fun `a device that is not asking for an OpenBeken login never receives it`() {
         val d = device("Basic realm=\"Router\"")
-        assertThrows(TuyaException::class.java) { d.light(Gate(allowed = true)).read() }
+        assertThrows(LightException::class.java) { d.light(Gate(allowed = true)).read() }
         assertEquals(listOf<String?>(null), d.auth.toList())
     }
 
     @Test fun `home wifi logs in after the challenge`() {
         val d = device(openBeken)
         val gate = Gate(allowed = true)
-        assertNotNull(d.light(gate).read().state)
+        assertNotNull(d.light(gate).read())
         assertNull(d.auth[0])
         assertTrue(d.auth[1]!!.startsWith("Basic "))
         assertEquals(1, gate.accepted)
@@ -86,7 +86,7 @@ class OpenBekenPasswordTest {
 
     @Test fun `a light without a login is not sent the password`() {
         val d = device(null)
-        assertNotNull(d.light(Gate(allowed = true)).read().state)
+        assertNotNull(d.light(Gate(allowed = true)).read())
         assertEquals(listOf<String?>(null), d.auth.toList())
     }
 

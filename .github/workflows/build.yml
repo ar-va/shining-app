@@ -21,7 +21,8 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v6
+      # Third-party actions are pinned to a commit: this job holds the permanent signing key.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
 
       # Permanent release key from repository secrets (absent for forks: falls back to debug signing).
       - name: Restore signing key
@@ -37,7 +38,7 @@ jobs:
           SHINING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SHINING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SHINING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: ./gradlew :tuya:test :app:testDebugUnitTest assembleRelease
+        run: ./gradlew :app:testDebugUnitTest assembleRelease
 
       - name: Show signing certificate
         run: |
@@ -51,6 +52,6 @@ jobs:
 
       - name: Publish release (tags only)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           files: app/build/named-apk/Shining-*.apk

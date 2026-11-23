@@ -1,14 +1,11 @@
 package com.arva.shining
 
-import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,24 +23,14 @@ import com.arva.shining.ui.SettingsScreen
 class MainActivity : ComponentActivity() {
     private val main: MainViewModel by viewModels()
     private val settings: SettingsViewModel by viewModels()
-    private var openSettings by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // Android hands back the original link when it restores the app; that link was already handled.
-        val restored = savedInstanceState != null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
-        if (!restored) handleSetupLink(intent)
         setContent {
             ShiningTheme {
                 // Simple saved route: "main", "settings", "automations", "edit:<id>" or "edit:"
                 var route by rememberSaveable { mutableStateOf("main") }
-                LaunchedEffect(openSettings) {
-                    if (openSettings) {
-                        route = "settings"
-                        openSettings = false
-                    }
-                }
                 val leaveSettings: () -> Unit = {
                     settings.discard()
                     route = "main"
@@ -87,11 +74,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        handleSetupLink(intent)
-    }
-
     override fun onResume() {
         super.onResume()
         main.refresh()
@@ -99,18 +81,6 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             runCatching { Presence.onAppOpened(lightApp) }
             main.refresh(showLoading = false)
-        }
-    }
-
-    /** A link only fills in Settings. Nothing is saved until the person presses Save. */
-    private fun handleSetupLink(intent: Intent?) {
-        val link = intent?.data?.toString() ?: return
-        intent.data = null // don't re-apply on rotation
-        if (settings.pasteLink(link)) {
-            openSettings = true
-            Toast.makeText(this, "Check the details, then press Save", Toast.LENGTH_LONG).show()
-        } else {
-            Toast.makeText(this, "That setup link is incomplete", Toast.LENGTH_LONG).show()
         }
     }
 }

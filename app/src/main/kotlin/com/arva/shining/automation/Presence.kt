@@ -14,7 +14,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
 import com.arva.shining.LightApp
-import com.arva.shining.LightController
+import com.arva.shining.light.LightState
 import com.arva.shining.light.PasswordTrust
 import com.arva.shining.lightApp
 import kotlinx.coroutines.delay
@@ -114,7 +114,7 @@ object Presence {
      * The light answered on [network]. Queued runs always go now. Arrival automations need a real
      * return (see [isArrival]), so a Wi-Fi drop, a restart or a briefly unplugged light doesn't count.
      */
-    private suspend fun onHome(app: LightApp, network: Network, snapshot: LightController.Snapshot) {
+    private suspend fun onHome(app: LightApp, network: Network, snapshot: LightState) {
         val store = app.automations
         val arrived = isArrival(store.presence, store.homeNetwork, network.toString(), store.awaySince, System.currentTimeMillis())
         store.presence = State.HOME
@@ -163,7 +163,7 @@ object Presence {
         return ran
     }
 
-    private suspend fun runArrivals(app: LightApp, snapshot: LightController.Snapshot, network: Network) {
+    private suspend fun runArrivals(app: LightApp, snapshot: LightState, network: Network) {
         val store = app.automations
         val now = System.currentTimeMillis()
         if (now - store.lastArrivalMillis < ARRIVAL_COOLDOWN_MS) {
@@ -176,7 +176,7 @@ object Presence {
         store.lastArrivalMillis = now
         val stamp = CatchUp.stamp(now)
         for (a in candidates) {
-            if (snapshot.state?.on == true) {
+            if (snapshot.on) {
                 store.setResult(a.id, "Skipped $stamp: light was already on")
                 continue
             }
@@ -192,7 +192,7 @@ object Presence {
         network: Network,
         waits: List<Long>,
         trust: PasswordTrust = PasswordTrust.KNOWN_NETWORK,
-    ): LightController.Snapshot? {
+    ): LightState? {
         for (wait in waits) {
             if (wait > 0) delay(wait)
             runCatching { app.controller.status(network, trust) }
